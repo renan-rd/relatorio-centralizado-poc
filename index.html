@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Painel de marketing — POC</title>
+    <meta
+      name="description"
+      content="Réplica estática do Painel de marketing do Centralizador, para testes com usuários."
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;0,800;0,900;1,400;1,500;1,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/styles.css" />
+  </head>
+  <body>
+    <main class="panel" aria-label="Painel de marketing">
+      <header class="panel-header">
+        <div class="panel-header__main">
+          <p class="panel-header__section">
+            Performance de marketing da sua conta.
+          </p>
+          <h1 class="panel-header__title">Painel de marketing</h1>
+        </div>
+      </header>
+
+      <div class="period-row" id="period-row" data-testid="period-picker"></div>
+
+      <div class="panel-blocks">
+        <section id="block-funnel" data-testid="funnel"></section>
+        <section id="block-daily" class="block" data-testid="daily"></section>
+        <section id="block-bands" class="block" data-testid="bands"></section>
+        <!-- As conversões são DOIS blocos irmãos no painel, no mesmo ritmo de
+             48px dos demais (na tela real o componente devolve um fragmento). -->
+        <section
+          id="block-conv-kpis"
+          class="block"
+          data-testid="conv-kpis"
+        ></section>
+        <section
+          id="block-conv-time"
+          class="block"
+          data-testid="conv-time"
+        ></section>
+        <section id="block-email" class="block" data-testid="email"></section>
+      </div>
+
+      <footer class="poc-footer">
+        <span
+          ><strong>Protótipo para testes com usuários.</strong> Dados
+          sintéticos, sem conexão com a conta.</span
+        >
+        <span id="poc-scenario"></span>
+        <button type="button" id="poc-scenario-toggle">
+          Simular conta sem Google Analytics
+        </button>
+      </footer>
+    </main>
+
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/charts.js"></script>
+    <script src="assets/js/app.js"></script>
+  </body>
+</html>
