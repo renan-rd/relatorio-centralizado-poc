@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Painel de marketing — POC</title>
+    <title>Centralizador — protótipo</title>
     <meta
       name="description"
-      content="Réplica estática do Painel de marketing do Centralizador, para testes com usuários."
+      content="Réplica estática dos relatórios de captação e e-mail do Centralizador, para testes com usuários."
     />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="favicon.ico" />
@@ -20,48 +20,46 @@
     <link rel="stylesheet" href="assets/css/styles.css" />
   </head>
   <body>
-    <main class="panel" aria-label="Painel de marketing">
-      <header class="panel-header">
-        <div class="panel-header__main">
-          <p class="panel-header__section">
-            Performance de marketing da sua conta.
-          </p>
-          <h1 class="panel-header__title">Painel de marketing</h1>
-        </div>
-      </header>
-
-      <div class="period-row" id="period-row" data-testid="period-picker"></div>
-
-      <div class="panel-blocks">
-        <section id="block-funnel" data-testid="funnel"></section>
-        <section id="block-daily" class="block" data-testid="daily"></section>
-        <section id="block-bands" class="block" data-testid="bands"></section>
-        <!-- As conversões são DOIS blocos irmãos no painel, no mesmo ritmo de
-             48px dos demais (na tela real o componente devolve um fragmento). -->
-        <section
-          id="block-conv-kpis"
-          class="block"
-          data-testid="conv-kpis"
-        ></section>
-        <section
-          id="block-conv-time"
-          class="block"
-          data-testid="conv-time"
-        ></section>
-        <section id="block-email" class="block" data-testid="email"></section>
-      </div>
-
-      <footer class="poc-footer">
-        <span
-          ><strong>Protótipo para testes com usuários.</strong> Dados
-          sintéticos, sem conexão com a conta.</span
+    <div class="af-reports">
+      <nav class="af-reports__nav" aria-label="Relatórios">
+        <div class="af-reports__heading">Relatórios</div>
+        <div class="af-reports__label">Captação</div>
+        <button
+          type="button"
+          class="af-reports__item"
+          data-report="captacao"
+          aria-current="page"
         >
-        <span id="poc-scenario"></span>
-        <button type="button" id="poc-scenario-toggle">
-          Simular conta sem Google Analytics
+          Como está a captação
         </button>
-      </footer>
-    </main>
+        <button type="button" class="af-reports__item" data-report="emails">
+          Como foram os e-mails
+        </button>
+      </nav>
+
+      <div class="af-reports__content">
+        <header class="page-header">
+          <h1 class="page-header__title" id="page-title">Como está a captação</h1>
+        </header>
+
+        <div class="period-row" id="period-row" data-testid="period-picker"></div>
+
+        <div class="af-panel-blocks" id="panel-content"></div>
+
+        <footer class="poc-footer">
+          <span>
+            <strong>Protótipo para testes com usuários.</strong> Dados
+            sintéticos, sem conexão com a conta.
+          </span>
+          <span id="poc-scenario-controls">
+            <span id="poc-scenario"></span>
+            <button type="button" id="poc-scenario-toggle">
+              Simular conta sem Google Analytics
+            </button>
+          </span>
+        </footer>
+      </div>
+    </div>
 
     <script src="assets/js/data.js"></script>
     <script src="assets/js/charts.js"></script>

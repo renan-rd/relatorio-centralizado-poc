@@ -4,7 +4,8 @@
 // estática, servida pelo GitHub Pages), então o necessário do recharts foi
 // reimplementado: curva monotônica (a mesma `curveMonotoneX` do d3, que o
 // recharts usa em `type="monotone"`), grid tracejado, eixos com os mesmos
-// formatos e o tooltip com cursor vertical na posição do mouse.
+// formatos, eixo duplo para visitantes, séries de referência (período anterior
+// e projeção) e tooltip com cursor vertical na posição do mouse.
 (function () {
   'use strict'
 
@@ -75,13 +76,18 @@
   }
 
   // ─── Escalas ──────────────────────────────────────────────────────────────
-  // "Nice ticks" no espírito do recharts: 5 passos com passo 1/2/5×10^n.
+  // "Nice ticks" no espírito do recharts: até 5 passos, com multiplicadores
+  // 1 / 1,5 / 2 / 2,5 / 3 / 4 / 5 / 7 / 10 × 10^n. É o que faz o eixo de
+  // 0–6.000 cair em 0 / 1.500 / 3.000 / 4.500 / 6.000, como na tela real.
+  const STEPS = [1, 1.5, 2, 2.5, 3, 4, 5, 7, 10]
+
   function niceTicks(max, count = 5) {
     if (!(max > 0)) return [0, 1]
     const rough = max / (count - 1)
     const magnitude = Math.pow(10, Math.floor(Math.log10(rough)))
     const residual = rough / magnitude
-    const step = (residual > 5 ? 10 : residual > 2 ? 5 : residual > 1 ? 2 : 1) * magnitude
+    const multiplier = STEPS.find(step => step >= residual - 1e-9) ?? 10
+    const step = multiplier * magnitude
     const ticks = []
     for (let value = 0; value <= Math.ceil(max / step) * step + step / 2; value += step) {
       ticks.push(Math.round(value))
@@ -90,17 +96,37 @@
   }
 
   const integerFormat = new Intl.NumberFormat('pt-BR')
-  const percentFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 })
   const dateFormat = iso => new Date(`${iso}T12:00:00Z`).toLocaleDateString('pt-BR')
+  const labelFor = iso => (iso && iso.startsWith('D') ? iso : dateFormat(iso))
 
-  // ─── Gráfico de área com eixo e tooltip ───────────────────────────────────
-  // `series` = [{ key, label, color }]. Mesma anatomia do recharts: 56px de
-  // eixo Y à esquerda, 30px de eixo X embaixo, margem de 8px no topo/direita.
+  // ─── Série em trechos (quebra nos nulls) ──────────────────────────────────
+  // O recharts com `connectNulls={false}` interrompe o traço onde o valor é
+  // null — é o que separa o medido da projeção. Aqui os trechos contíguos são
+  // desenhados separadamente.
+  function segments(points, xAt, yAt, key) {
+    const result = []
+    let run = []
+    points.forEach((point, index) => {
+      const value = point[key]
+      if (value === null || value === undefined) {
+        if (run.length) result.push(run)
+        run = []
+        return
+      }
+      run.push({ x: xAt(index), y: yAt(value), value })
+    })
+    if (run.length) result.push(run)
+    return result
+  }
+
+  // ─── Gráfico de área com eixos, referências e tooltip ─────────────────────
+  // `series` = [{ key, label, color, axis: 'left' | 'right' }].
+  // Cada ponto pode trazer `keyPrevious` (referência) e `keyForecast`
+  // (projeção), além de `projected: true` nos dias projetados.
   function areaChart(container, options) {
-    const { points, series, height, ariaLabel, emptyText } = options
+    const { points, series, ariaLabel, emptyText, forecastDash = '2 3' } = options
     container.classList.add('chart')
-    container.style.height = `${height}px`
-    container.innerHTML = ''
+    container.replaceChildren()
 
     if (!points.length || !series.length) {
       const empty = document.createElement('p')
@@ -114,20 +140,31 @@
     container.setAttribute('role', 'img')
 
     const width = Math.max(280, container.clientWidth || 800)
-    const margin = { top: 8, right: 8, bottom: 30, left: 56 }
+    const height = Math.max(160, container.clientHeight || 320)
+    const hasRightAxis = series.some(item => item.axis === 'right')
+    const margin = { top: 8, right: hasRightAxis ? 56 : 32, bottom: 30, left: 56 }
     const innerWidth = width - margin.left - margin.right
     const innerHeight = height - margin.top - margin.bottom
 
-    const maxValue = Math.max(
-      1,
-      ...points.flatMap(point => series.map(item => point[item.key] ?? 0)),
-    )
-    const ticks = niceTicks(maxValue)
-    const domainMax = ticks[ticks.length - 1] || maxValue
+    const valuesOf = axis =>
+      points.flatMap(point =>
+        series
+          .filter(item => (item.axis === 'right') === (axis === 'right'))
+          .flatMap(item => [point[item.key], point[`${item.key}Previous`], point[`${item.key}Forecast`]]),
+      )
+    const maxValue = axis => Math.max(1, ...valuesOf(axis).filter(value => typeof value === 'number'))
+
+    const leftTicks = niceTicks(maxValue('left'))
+    const rightTicks = hasRightAxis ? niceTicks(maxValue('right'), 4) : []
+    const leftMax = leftTicks[leftTicks.length - 1] || 1
+    const rightMax = rightTicks[rightTicks.length - 1] || 1
 
     const xAt = index =>
       margin.left + (points.length === 1 ? innerWidth / 2 : (index / (points.length - 1)) * innerWidth)
-    const yAt = value => margin.top + innerHeight - (value / domainMax) * innerHeight
+    const yAt = (value, axis = 'left') =>
+      margin.top +
+      innerHeight -
+      (value / (axis === 'right' ? rightMax : leftMax)) * innerHeight
 
     const svg = el('svg', {
       width,
@@ -137,9 +174,9 @@
       focusable: 'false',
     })
 
-    // Grid horizontal tracejado em cada tick do eixo Y.
+    // Grid horizontal tracejado em cada tick do eixo esquerdo.
     const grid = el('g', { class: 'chart__grid' })
-    ticks.forEach(value => {
+    leftTicks.forEach(value => {
       grid.appendChild(
         el('line', {
           x1: margin.left,
@@ -163,9 +200,9 @@
     )
 
     // Labels do eixo X: primeiro e último sempre; o resto no passo que couber.
-    // O último é reservado antes de desenhar os demais, senão um label do passo
-    // regular cai quase em cima dele ("29/10/202628/10/2026").
-    const labelWidth = 78
+    // Na sobreposição os rótulos são "D1", "D2"… (curto), então cabem muito
+    // mais do que as datas completas.
+    const labelWidth = points.some(point => String(point.date).startsWith('D')) ? 38 : 78
     const maxTicks = Math.max(2, Math.floor(innerWidth / labelWidth))
     const step = Math.max(1, Math.ceil((points.length - 1) / (maxTicks - 1)))
     const lastIndex = points.length - 1
@@ -175,7 +212,6 @@
       const isFirst = index === 0
       const isLast = index === lastIndex
       if (!isFirst && !isLast && index % step !== 0) return
-      // Um label regular perto demais do último sai de cena: o último é âncora.
       if (!isLast && lastIndex - index < step && lastX - xAt(index) < labelWidth) return
       if (drawn.some(x => Math.abs(x - xAt(index)) < labelWidth)) return
       drawn.push(xAt(index))
@@ -185,12 +221,12 @@
         y: height - margin.bottom + 18,
         'text-anchor': 'middle',
       })
-      text.textContent = dateFormat(point.date)
+      text.textContent = labelFor(point.date)
       svg.appendChild(text)
     })
 
     // Labels do eixo Y, alinhados à direita da coluna de 56px.
-    ticks.forEach(value => {
+    leftTicks.forEach(value => {
       const text = el('text', {
         class: 'chart__tick',
         x: margin.left - 12,
@@ -201,6 +237,20 @@
       svg.appendChild(text)
     })
 
+    // Eixo direito (visitantes): outra ordem de grandeza, na cor da série.
+    if (hasRightAxis) {
+      rightTicks.forEach(value => {
+        const text = el('text', {
+          class: 'chart__tick chart__tick--right',
+          x: width - margin.right + 12,
+          y: yAt(value, 'right') + 4,
+          'text-anchor': 'start',
+        })
+        text.textContent = integerFormat.format(value)
+        svg.appendChild(text)
+      })
+    }
+
     // Cursor vertical do tooltip.
     const cursor = el('line', {
       class: 'chart__cursor',
@@ -210,29 +260,66 @@
     })
     svg.appendChild(cursor)
 
+    const drawSeries = (item, key, options_) => {
+      const { dashed, fill, opacity } = options_
+      const runs = segments(points, xAt, yAtBySeries(item), key)
+      runs.forEach(run => {
+        if (run.length === 1) {
+          svg.appendChild(
+            el('circle', {
+              cx: run[0].x,
+              cy: run[0].y,
+              r: 3,
+              fill: item.color,
+              opacity: opacity ?? 1,
+            }),
+          )
+          return
+        }
+        if (fill) {
+          svg.appendChild(
+            el('path', {
+              d: monotoneArea(run, height - margin.bottom),
+              fill: item.color,
+              'fill-opacity': '0.2',
+            }),
+          )
+        }
+        svg.appendChild(
+          el('path', {
+            d: monotoneLine(run),
+            fill: 'none',
+            stroke: item.color,
+            'stroke-width': '2',
+            'stroke-linejoin': 'round',
+            'stroke-linecap': 'round',
+            'stroke-dasharray': dashed || null,
+            opacity: opacity ?? 1,
+          }),
+        )
+      })
+    }
+
+    function yAtBySeries(item) {
+      return value =>
+        item.axis === 'right' ? yAt(value, 'right') : yAt(value, 'left')
+    }
+
     // Áreas — na ordem das séries, então a menor é desenhada por cima.
     series.forEach(item => {
-      const path = points.map((point, index) => ({
-        x: xAt(index),
-        y: yAt(point[item.key] ?? 0),
-      }))
-      svg.appendChild(
-        el('path', {
-          d: monotoneArea(path, height - margin.bottom),
-          fill: item.color,
-          'fill-opacity': '0.2',
-        }),
-      )
-      svg.appendChild(
-        el('path', {
-          d: monotoneLine(path),
-          fill: 'none',
-          stroke: item.color,
-          'stroke-width': '2',
-          'stroke-linejoin': 'round',
-          'stroke-linecap': 'round',
-        }),
-      )
+      drawSeries(item, item.key, { fill: true })
+    })
+    // Período anterior: mesma cor, tracejado e sem preenchimento.
+    series.forEach(item => {
+      if (points.some(point => point[`${item.key}Previous`] != null)) {
+        drawSeries(item, `${item.key}Previous`, { dashed: '5 4', opacity: 0.55 })
+      }
+    })
+    // Projeção: pontilhado próprio, sem preenchimento.
+    series.forEach(item => {
+      if (points.some(point => point[`${item.key}Forecast`] != null)) {
+        drawSeries(item, `${item.key}Forecast`, { dashed: forecastDash, opacity: 0.9 })
+      }
     })
 
     container.appendChild(svg)
@@ -242,24 +329,63 @@
     tooltip.className = 'chart-tooltip'
     container.appendChild(tooltip)
 
+    const hasComparison = points.some(point =>
+      series.some(item => point[`${item.key}Previous`] != null),
+    )
+
+    const valueOfPoint = (point, item) => {
+      const current = point[item.key]
+      if (current !== null && current !== undefined) return { value: current, projected: false }
+      const forecast = point[`${item.key}Forecast`]
+      if (forecast !== null && forecast !== undefined) return { value: forecast, projected: true }
+      return null
+    }
+
     const showAt = index => {
       const point = points[index]
       const x = xAt(index)
-      const left = Math.min(Math.max(x, 70), width - 70)
+      const left = Math.min(Math.max(x, 80), width - 80)
       cursor.setAttribute('x1', x)
       cursor.setAttribute('x2', x)
       cursor.setAttribute('opacity', '1')
 
-      const rows = series
-        .map(item => {
-          const label = item.label
-          const value = integerFormat.format(point[item.key] ?? 0)
-          return `<p class="chart-tooltip__row">${label}: ${value}</p>`
-        })
-        .join('')
+      const rowNodes = series.map(item => {
+        const current = valueOfPoint(point, item)
+        const previous = point[`${item.key}Previous`]
+        const row = document.createElement('p')
+        row.className = 'chart-tooltip__row'
+        const name = `${item.label}: `
+        if (!current) {
+          row.textContent = `${name}—`
+        } else if (current.projected) {
+          row.textContent = `${name}≈ ${integerFormat.format(current.value)}`
+        } else {
+          row.textContent = `${name}${integerFormat.format(current.value)}`
+        }
+        if (hasComparison && !current?.projected) {
+          const suffix = document.createElement('span')
+          suffix.className = 'chart-tooltip__previous'
+          suffix.textContent =
+            previous === null || previous === undefined
+              ? ' (antes: —)'
+              : ` (antes: ${integerFormat.format(previous)})`
+          row.appendChild(suffix)
+        }
+        return row
+      })
 
-      const topValue = Math.max(...series.map(item => point[item.key] ?? 0))
-      tooltip.innerHTML = `<p class="chart-tooltip__date">${dateFormat(point.date)}</p>${rows}`
+      const dateNode = document.createElement('p')
+      dateNode.className = 'chart-tooltip__date'
+      dateNode.textContent = labelFor(point.date)
+
+      const topValue = Math.max(
+        ...series.map(item => {
+          const current = valueOfPoint(point, item)
+          return current ? current.value : 0
+        }),
+      )
+
+      tooltip.replaceChildren(dateNode, ...rowNodes)
       tooltip.style.left = `${left}px`
       tooltip.style.top = `${Math.max(46, yAt(topValue) - 12)}px`
       tooltip.style.opacity = '1'
@@ -270,111 +396,31 @@
       tooltip.style.opacity = '0'
     }
 
-    container.addEventListener('mousemove', event => {
+    // Propriedades (e não addEventListener): o gráfico é redesenhado no resize
+    // e no toggle de séries, e listeners acumulados disparariam o tooltip
+    // várias vezes para o mesmo movimento.
+    container.onmousemove = event => {
       const rect = container.getBoundingClientRect()
       const x = event.clientX - rect.left - margin.left
       const ratio = innerWidth === 0 ? 0 : x / innerWidth
       const index = Math.min(points.length - 1, Math.max(0, Math.round(ratio * (points.length - 1))))
       showAt(index)
-    })
-    container.addEventListener('mouseleave', hide)
-  }
-
-  // ─── Sparkline dos cards ──────────────────────────────────────────────────
-  // Desenha `level` (0–100) numa escala fixa, como a tela real: a curva é
-  // forma, não leitura — o valor honesto vai no tooltip.
-  let sparkGradientId = 0
-
-  function sparkline(container, trend) {
-    container.innerHTML = ''
-    if (trend.length < 2) {
-      container.classList.add('kpi-card__spark-single')
-      container.textContent = 'Dados insuficientes para exibir a evolução em gráfico.'
-      return
     }
-
-    const height = 132
-    const width = Math.max(120, container.clientWidth || 240)
-    const gradientId = `spark-${(sparkGradientId += 1)}`
-
-    const xAt = index => (index / (trend.length - 1)) * width
-    const yAt = level => height - 4 - (level / 100) * (height - 8)
-    const path = trend.map((point, index) => ({ x: xAt(index), y: yAt(point.level) }))
-
-    const svg = el('svg', {
-      width,
-      height,
-      viewBox: `0 0 ${width} ${height}`,
-      preserveAspectRatio: 'none',
-      'aria-hidden': 'true',
-      focusable: 'false',
-    })
-
-    const defs = el('defs')
-    const gradient = el('linearGradient', { id: gradientId, x1: '0', y1: '0', x2: '0', y2: '1' })
-    gradient.appendChild(
-      el('stop', {
-        offset: '0%',
-        'stop-color': 'var(--neutral-icon-low-emphasis)',
-        'stop-opacity': '0.18',
-      }),
-    )
-    gradient.appendChild(
-      el('stop', {
-        offset: '100%',
-        'stop-color': 'var(--neutral-icon-low-emphasis)',
-        'stop-opacity': '0.02',
-      }),
-    )
-    defs.appendChild(gradient)
-    svg.appendChild(defs)
-
-    svg.appendChild(
-      el('path', {
-        d: monotoneArea(path, height),
-        fill: `url(#${gradientId})`,
-      }),
-    )
-    svg.appendChild(
-      el('path', {
-        d: monotoneLine(path),
-        fill: 'none',
-        stroke: 'var(--neutral-icon-low-emphasis)',
-        'stroke-width': '2.5',
-        'stroke-linejoin': 'round',
-        'stroke-linecap': 'round',
-        'vector-effect': 'non-scaling-stroke',
-      }),
-    )
-
-    container.appendChild(svg)
-
-    const tooltip = document.createElement('div')
-    tooltip.className = 'spark-tooltip'
-    container.appendChild(tooltip)
-
-    container.addEventListener('mousemove', event => {
-      const rect = container.getBoundingClientRect()
-      const ratio = (event.clientX - rect.left) / rect.width
-      const index = Math.min(trend.length - 1, Math.max(0, Math.round(ratio * (trend.length - 1))))
-      const point = trend[index]
-      tooltip.innerHTML =
-        `<span class="spark-tooltip__value">${integerFormat.format(point.value)}</span>` +
-        `<span class="spark-tooltip__date">${dateFormat(point.date)}</span>`
-      tooltip.style.left = `${Math.min(Math.max(xAt(index), 50), width - 50)}px`
-      tooltip.style.top = `${yAt(point.level) - 8}px`
-      tooltip.style.opacity = '1'
-    })
-    container.addEventListener('mouseleave', () => {
-      tooltip.style.opacity = '0'
-    })
+    container.onmouseleave = hide
   }
 
-  // Re-renderiza os gráficos quando a largura muda (o recharts faz o mesmo
-  // via ResponsiveContainer).
+  // Re-renderiza os gráficos quando a largura/altura útil muda (o recharts faz
+  // o mesmo via ResponsiveContainer). Só reage a mudança real de medida.
   function observeResize(target, render) {
+    let lastWidth = 0
+    let lastHeight = 0
     let frame = null
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver(entries => {
+      const rect = entries[0]?.contentRect
+      if (!rect) return
+      if (Math.abs(rect.width - lastWidth) < 1 && Math.abs(rect.height - lastHeight) < 1) return
+      lastWidth = rect.width
+      lastHeight = rect.height
       if (frame) cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         frame = null
@@ -382,14 +428,17 @@
       })
     })
     observer.observe(target)
+    return observer
   }
 
   window.PocCharts = {
     areaChart,
-    sparkline,
     monotoneLine,
     niceTicks,
     observeResize,
-    formats: { integer: integerFormat, percent: percentFormat, date: dateFormat },
+    formats: {
+      integer: integerFormat,
+      date: dateFormat,
+    },
   }
 })()

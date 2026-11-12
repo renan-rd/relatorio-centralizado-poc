@@ -1,93 +1,117 @@
-// Página estática do Painel de marketing — toda a interação em JS puro.
+// Página estática do Centralizador — toda a interação em JS puro.
 //
-// Reproduz a tela do MFE (`analysis-centralizer`) com os mesmos textos, ordem
-// dos blocos e regras de apresentação:
+// Reproduz os dois relatórios de captação do MFE (`analysis-centralizer`) com
+// os mesmos textos, ordem dos blocos e regras de apresentação:
 //
-//   - funil (visitantes + 4 estágios) com sparkline e comparação;
-//   - evolução por dia, com séries ligáveis;
-//   - faixa esperada das taxas de conversão;
-//   - conversões (dois números + gráfico);
-//   - campanhas e automações de email (8 cards + 3 abas de tabela).
+//   - "Como está a captação": cards de KPI (que também ligam/desligam as séries
+//     do gráfico), um gráfico único com três leituras (por dia, acumulado e
+//     taxas), sobreposição do período anterior e projeção do mês corrente;
+//   - "Como foram os e-mails": cards de evento, ressalva de escopo e três abas
+//     de tabela.
+//
+// O menu de relatórios é o mesmo da tela real: Captação tem os dois relatórios
+// e a seção Vendas está desligada (não aparece e nenhum link abre uma tela de
+// vendas).
 //
 // Nenhuma chamada de rede: os dados vêm de `data.js` (sintéticos).
 (function () {
   'use strict'
 
-  const { integer, percent, date } = window.PocCharts.formats
   const data = window.PocData
+  const { integer, date } = window.PocCharts.formats
 
-  // ─── Textos (os mesmos do locale pt-BR do MFE) ─────────────────────────────
+  // ─── Textos (os do locale pt-BR do MFE) ────────────────────────────────────
   const T = {
-    kpi_previous_period: 'no período anterior',
-    kpi_no_variation: 'Sem variação',
-    kpi_single_value: 'Dados insuficientes para exibir a evolução em gráfico.',
-    stage_leads: 'Leads',
-    stage_leads_help: 'Total de novos contatos gerados no período selecionado.',
-    stage_qualified: 'Qualificados',
-    stage_qualified_help:
+    report_captacao_title: 'Como está a captação',
+    report_emails_title: 'Como foram os e-mails',
+    nav_reports: 'Relatórios',
+    nav_group_captacao: 'Captação',
+
+    marketing_kpi_previous_period: 'no período anterior',
+    marketing_kpi_previous_amount: value => `Antes: ${value}`,
+    marketing_kpi_no_variation: 'Sem variação',
+    marketing_kpi_series_toggle: name => `Mostrar ou ocultar ${name} no gráfico`,
+
+    funnel_stage_visits: 'Visitantes',
+    funnel_stage_visits_help: 'Pessoas que visitaram o site no período, pelo Google Analytics.',
+    funnel_stage_leads: 'Leads',
+    funnel_stage_leads_help: 'Total de novos contatos gerados no período selecionado.',
+    funnel_stage_qualified_leads: 'Qualificados',
+    funnel_stage_qualified_leads_help:
       'Contatos que tiveram seu estágio alterado para lead qualificado no período selecionado.',
-    stage_opportunities: 'Oportunidades',
-    stage_opportunities_help:
+    funnel_stage_opportunities: 'Oportunidades',
+    funnel_stage_opportunities_help:
       'Contatos marcados como oportunidade no Marketing no período selecionado.',
-    stage_sales: 'Vendas',
-    stage_sales_help: 'Contatos com vendas registradas no Marketing no período selecionado.',
-    stage_visits: 'Visitantes',
-    stage_visits_help: 'Pessoas que visitaram o site no período, pelo Google Analytics.',
+    funnel_stage_sales: 'Vendas',
+    funnel_stage_sales_help: 'Contatos com vendas registradas no Marketing no período selecionado.',
     visitors_not_connected:
       'Esta conta não tem uma integração com o Google Analytics conectada, então não há dados de visitantes para exibir.',
-    source: (start, end) => `Período de ${start} a ${end}.`,
-    source_comparison: (start, end, prevStart, prevEnd) =>
-      `Período de ${start} a ${end}, comparado a ${prevStart} a ${prevEnd}.`,
-    daily_title: 'Evolução por dia',
-    daily_help:
-      'Acompanhe dia a dia o volume de leads, qualificados, oportunidades e vendas.',
-    daily_period: (start, end) => `Período de ${start} a ${end}.`,
-    daily_none: 'Selecione ao menos uma série para comparar.',
-    daily_widens_scale:
-      'A escala do eixo acompanha o volume de visitantes; as demais séries ficam achatadas.',
-    series_visitors: 'Visitantes',
-    series_leads: 'Leads',
-    series_qualified: 'Leads qualificados',
-    series_opportunities: 'Oportunidades',
-    series_sales: 'Vendas',
-    bands_title: 'Faixa esperada das taxas de conversão',
-    bands_subtitle: 'Mostra se a conversão deste período está no ritmo habitual da sua conta.',
-    bands_limit: 'Selecione um período de até 3 meses.',
-    band_rate_qualification: 'Taxa de qualificação',
-    band_rate_opportunity: 'Taxa de oportunidade',
-    band_rate_win: 'Taxa de conversão em venda',
-    band_dentro: 'Dentro do esperado',
-    band_acima: 'Acima do esperado',
-    band_abaixo: 'Abaixo do esperado',
-    band_insuficiente: 'Evidência insuficiente',
-    band_note: (low, high) => `Faixa esperada de ${low} a ${high}.`,
-    band_note_help:
-      'Analisamos os resultados da sua conta nos 3 períodos anteriores, de mesma duração do período selecionado.',
-    band_note_insufficient: trials =>
+
+    funnel_rate_of_visits: 'dos visitantes',
+    funnel_rate_of_leads: 'dos leads',
+    funnel_rate_of_qualified: 'dos qualificados',
+    funnel_rate_of_opportunities: 'das oportunidades',
+
+    performance_title: 'Desempenho no período',
+    performance_view_label: 'Leitura do gráfico',
+    performance_view_daily: 'Por dia',
+    performance_view_cumulative: 'Acumulado',
+    performance_view_rates: 'Taxas',
+    performance_compare_toggle: 'Comparar com período anterior',
+    performance_compare_help:
+      'Tracejado: período anterior. No mês corrente, o mês anterior fechado, projetado até o fim.',
+    performance_chart_aria: (start, end) => `Desempenho de ${start} a ${end}.`,
+    daily_series_none_selected: 'Selecione ao menos uma série para comparar.',
+    real_funnel_source: (start, end) => `Período de ${start} a ${end}.`,
+    real_funnel_source_with_comparison: (start, end, previousStart, previousEnd) =>
+      `Período de ${start} a ${end}, comparado a ${previousStart} a ${previousEnd}.`,
+
+    conversion_bands_subtitle:
+      'Cada taxa divide a etapa pela anterior. A faixa é o ritmo da conta, não uma meta.',
+    conversion_bands_period_limit: 'Selecione um período de até 3 meses.',
+    conversion_rate_qualification: 'Taxa de qualificação',
+    conversion_rate_qualification_help: 'Qualificados divididos pelos leads do período.',
+    conversion_rate_opportunity: 'Taxa de oportunidade',
+    conversion_rate_opportunity_help: 'Oportunidades divididas pelos qualificados do período.',
+    conversion_rate_win: 'Taxa de conversão em venda',
+    conversion_rate_win_help: 'Vendas divididas pelas oportunidades do período.',
+    conversion_band_dentro: 'No ritmo recente',
+    conversion_band_acima: 'Acima do ritmo recente',
+    conversion_band_abaixo: 'Abaixo do ritmo recente',
+    conversion_band_insuficiente: 'Evidência insuficiente',
+    conversion_band_note: (low, high) => `Ritmo recente de ${low} a ${high}.`,
+    conversion_band_note_help:
+      'Média da conta nos 3 períodos anteriores de mesma duração. Faixa de 95% em torno dessa média. Não é meta.',
+    conversion_band_note_insufficient: trials =>
       `Amostra pequena para classificar (${integer.format(trials)} no denominador). Não é erro — é cedo para dizer se está dentro ou fora do normal.`,
+
+    conv_period: (start, end) => `Período de ${start} a ${end}.`,
     conv_qualified_title: 'Conversões de leads qualificados',
-    conv_qualified_hint:
-      'Eventos em que contatos atingiram o estágio de Lead Qualificado no período selecionado.',
+    conv_qualified_hint: 'Contatos que entraram em lead qualificado. Difere do card Qualificados do funil.',
     conv_opportunities_title: 'Conversões de oportunidades',
-    conv_opportunities_hint:
-      'Total de eventos em que contatos foram marcados como Oportunidade no período selecionado.',
+    conv_opportunities_hint: 'Eventos em que um contato virou oportunidade. Difere do card de estágio do funil.',
     conv_over_time_title: 'Conversões durante o tempo',
-    conv_over_time_hint:
-      'Volume diário de interações de conversão, oportunidades marcadas e clientes conquistados.',
-    conv_series_leads: 'Conversões dos leads',
-    conv_series_opportunities: 'Oportunidades',
-    conv_series_customers: 'Clientes',
+    conv_over_time_hint: 'Por dia: eventos de conversão, de oportunidade e clientes. Não lista a conversão.',
     conv_over_time_aria: (start, end) =>
       `Conversões por dia de ${start} a ${end}: leads, oportunidades e clientes.`,
-    email_title: 'Campanhas e automações de email',
-    email_help:
+    conv_series_leads: 'Conversões dos leads',
+    conv_series_opportunities: 'Eventos de oportunidade',
+    conv_series_customers: 'Clientes',
+    daily_projection_toggle: 'Ver projeção',
+    daily_projection_help:
+      'Ritmo médio diário até o fim do mês; hoje zerado fica fora. Estimativa, não medição.',
+    daily_projection_tooltip_value: value => `≈ ${value} por dia`,
+    daily_series_toggle_group: 'Séries para comparar',
+
+    email_report_title: 'Campanhas e automações de email',
+    email_report_help:
       'Desempenho dos e-mails disparados tanto em campanhas pontuais quanto em fluxos de automação.',
-    email_period: (start, end) => `Período de ${start} a ${end}.`,
-    email_scope_note:
+    email_report_period: (start, end) => `Período de ${start} a ${end}.`,
+    email_report_scope_note:
       'Dados consolidados das campanhas e automações do período selecionado. As taxas consideram eventos de e-mail e não contatos únicos, o que pode fazer os valores passarem de 100%.',
-    email_metric_campaign_count: 'E-mails',
+    email_metric_campaign_count: 'Campanhas e automações',
     email_metric_campaign_count_help:
-      'Quantidade de e-mails enviados por campanhas e automações no período selecionado.',
+      'Quantidade de campanhas e automações com envio no período. Não é o total de disparos.',
     email_metric_sent: 'Total de envios',
     email_metric_sent_help:
       'Total de disparos individuais de e-mails em campanhas e automações no período selecionado.',
@@ -95,8 +119,7 @@
     email_metric_delivered_help:
       'Total de e-mails que chegaram com sucesso ao destinatário no período selecionado.',
     email_metric_unique_opens: 'Aberturas',
-    email_metric_unique_opens_help:
-      'Total de aberturas de e-mails registradas no período selecionado.',
+    email_metric_unique_opens_help: 'Total de aberturas de e-mails registradas no período selecionado.',
     email_metric_open_rate: 'Taxa de abertura',
     email_metric_open_rate_help:
       'Percentual de aberturas por entrega. Pode passar de 100% se houver aberturas repetidas.',
@@ -129,8 +152,8 @@
     email_col_click_rate: 'Tx. cliques',
     email_type_campaign: 'Campanha',
     email_type_workflow: 'Automação',
-    email_report_period: (start, end) => `Período de ${start} a ${end}.`,
-    email_caption: 'Campanhas de email do período',
+    email_recent_caption: 'Campanhas de email do período',
+
     period_label: 'Período',
     period_group: 'Períodos',
     period_today: 'Hoje',
@@ -184,11 +207,45 @@
       '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.91 12.466l5.341 5.34a.66.66 0 00.933 0l.623-.622a.66.66 0 000-.932L10.576 12l4.233-4.252a.66.66 0 00-.001-.932l-.623-.623a.66.66 0 00-.933 0l-5.34 5.34a.66.66 0 000 .933z"/></svg>',
     check:
       '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.114 18.16l-5.85-5.85a.9.9 0 010-1.274l1.272-1.272a.9.9 0 011.273 0l3.941 3.94 8.44-8.44a.9.9 0 011.274 0l1.272 1.272a.9.9 0 010 1.273l-10.35 10.35a.9.9 0 01-1.272 0z"/></svg>',
-    warning:
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5a1.6 1.6 0 011.39.8l9 15.6A1.6 1.6 0 0121 21.5H3a1.6 1.6 0 01-1.39-2.6l9-15.6A1.6 1.6 0 0112 2.5zm0 5a1 1 0 00-1 1v5a1 1 0 002 0v-5a1 1 0 00-1-1zm0 9.75a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5z"/></svg>',
+  }
+
+  // ─── Formatação ────────────────────────────────────────────────────────────
+  const percent2 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 })
+  const percent1 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 })
+  const percentFixed2 = new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
+  const fmtDate = iso => date(iso)
+  const pct2 = value => `${percent2.format(value * 100)}%`
+  const pct1 = value => `${percent1.format(value * 100)}%`
+
+  function signedPercent(value) {
+    if (value === 0) return '0%'
+    const sign = value > 0 ? '+' : '−'
+    return `${sign}${percent2.format(Math.abs(value))}%`
+  }
+
+  function localTodayIso() {
+    const now = new Date()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${now.getFullYear()}-${month}-${day}`
   }
 
   // ─── Helpers de DOM ────────────────────────────────────────────────────────
+  function appendChildren(node, children) {
+    ;(children || []).forEach(child => {
+      if (child === null || child === undefined || child === false) return
+      if (Array.isArray(child)) {
+        appendChildren(node, child)
+        return
+      }
+      node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child)
+    })
+  }
+
   function h(tag, attrs, children) {
     const node = document.createElement(tag)
     if (attrs) {
@@ -197,21 +254,19 @@
         if (key === 'class') node.className = value
         else if (key === 'html') node.innerHTML = value
         else if (key === 'text') node.textContent = value
+        else if (key === 'style') node.setAttribute('style', value)
         else if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(), value)
-        else node.setAttribute(key, value)
+        else node.setAttribute(key, value === true ? '' : value)
       })
     }
-    ;(children || []).forEach(child => {
-      if (child === null || child === undefined) return
-      node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child)
-    })
+    appendChildren(node, children)
     return node
   }
 
   function helpButton(text) {
-    return h('div', { class: 'metric-help-wrap' }, [
+    return h('span', { class: 'af-metric-help-wrap' }, [
       h('button', {
-        class: 'metric-help',
+        class: 'af-metric-help',
         type: 'button',
         'aria-label': text,
         html: ICONS.question,
@@ -220,16 +275,30 @@
     ])
   }
 
-  function blockTitle(title, help, level) {
-    return h('div', { class: 'block-title' }, [
+  function metricTitle(title, help, level) {
+    return h('div', { class: 'af-metric-title' }, [
       h(level || 'h3', { text: title }),
       help ? helpButton(help) : null,
     ])
   }
 
-  const fmtDate = iso => date(iso)
+  function checkControl({ checked, onChange, label, ariaLabel, className }) {
+    const input = h('input', {
+      class: 'check-input',
+      type: 'checkbox',
+      checked: checked ? 'checked' : null,
+      'aria-label': ariaLabel || null,
+      onchange: onChange,
+      onclick: event => event.stopPropagation(),
+    })
+    return h('label', { class: `check-control${className ? ` ${className}` : ''}` }, [
+      input,
+      h('span', { class: 'checkbox', html: ICONS.check }),
+      label ? h('span', { class: 'check-control__label', text: label }) : null,
+    ])
+  }
 
-  // ─── Seletor de período ────────────────────────────────────────────────────
+  // ─── Seleção de período ────────────────────────────────────────────────────
   // Nível 1 = atalhos; nível 2 = calendário + Aplicar. Presets aplicam no
   // clique; o período personalizado só no "Aplicar" (um intervalo é escolhido
   // em duas etapas).
@@ -239,14 +308,14 @@
 
     let open = false
     let level = 'root'
-    let calendarMonth = data.startOfMonth(state.endDate)
-    let draft = { start: state.startDate, end: state.endDate }
+    let calendarMonth = data.startOfMonth(state.range.endDate)
+    let draft = { start: state.range.startDate, end: state.range.endDate }
 
     const activePreset = () => {
       for (const group of data.PRESET_GROUPS) {
         for (const id of group) {
           const preset = data.presetRange(id, todayIso)
-          if (preset.startDate === state.startDate && preset.endDate === state.endDate) return id
+          if (preset.startDate === state.range.startDate && preset.endDate === state.range.endDate) return id
         }
       }
       return null
@@ -276,7 +345,7 @@
               class: 'period-option',
               type: 'button',
               role: 'option',
-              'aria-checked': String(activePreset() === id),
+              'aria-selected': String(activePreset() === id),
               text: PRESET_LABELS[id],
               onclick: () => applyRange(data.presetRange(id, todayIso)),
             }),
@@ -289,7 +358,7 @@
               class: 'period-option',
               type: 'button',
               role: 'option',
-              'aria-checked': String(activePreset() === id),
+              'aria-selected': String(activePreset() === id),
               text: PRESET_LABELS[id],
               onclick: () => applyRange(data.presetRange(id, todayIso)),
             }),
@@ -300,20 +369,19 @@
           h(
             'button',
             {
-              class: 'period-option',
+              class: 'period-option period-option--nav',
               type: 'button',
               role: 'option',
-              'aria-checked': 'false',
+              'aria-selected': 'false',
               onclick: () => {
                 level = 'custom'
-                draft = { start: state.startDate, end: state.endDate }
-                calendarMonth = data.startOfMonth(state.endDate)
+                draft = { start: state.range.startDate, end: state.range.endDate }
+                calendarMonth = data.startOfMonth(state.range.endDate)
                 render()
               },
             },
             [
               h('span', { text: T.period_custom }),
-              h('span', { class: 'period-option__spacer' }),
               h('span', { html: ICONS.chevronRight, 'aria-hidden': 'true' }),
             ],
           ),
@@ -413,19 +481,16 @@
       menu.appendChild(header)
       menu.appendChild(grid)
       menu.appendChild(
-        h(
-          'button',
-          {
-            class: 'period-apply',
-            type: 'button',
-            text: T.period_apply,
-            disabled: !draft.start || !draft.end,
-            onclick: () => {
-              if (!draft.start || !draft.end) return
-              applyRange({ startDate: draft.start, endDate: draft.end })
-            },
+        h('button', {
+          class: 'period-apply',
+          type: 'button',
+          text: T.period_apply,
+          disabled: !draft.start || !draft.end,
+          onclick: () => {
+            if (!draft.start || !draft.end) return
+            applyRange({ startDate: draft.start, endDate: draft.end })
           },
-        ),
+        }),
       )
       return menu
     }
@@ -434,7 +499,7 @@
       const preset = activePreset()
       const label = preset
         ? PRESET_LABELS[preset]
-        : `${shortDate(state.startDate)} – ${shortDate(state.endDate)}`
+        : `${shortDate(state.range.startDate)} – ${shortDate(state.range.endDate)}`
 
       container.replaceChildren(
         h('label', { class: 'period-row__label', text: T.period_label }),
@@ -450,15 +515,15 @@
                 event.stopPropagation()
                 open = !open
                 if (open) {
-                  draft = { start: state.startDate, end: state.endDate }
-                  calendarMonth = data.startOfMonth(state.endDate)
+                  draft = { start: state.range.startDate, end: state.range.endDate }
+                  calendarMonth = data.startOfMonth(state.range.endDate)
                 }
                 render()
               },
             },
             [
               h('span', { class: 'period-trigger__value', text: label }),
-              h('span', { html: ICONS.caretDown, 'aria-hidden': 'true' }),
+              h('span', { class: 'period-trigger__icon', html: ICONS.caretDown, 'aria-hidden': 'true' }),
             ],
           ),
           open ? renderMenu() : null,
@@ -476,527 +541,867 @@
     })
 
     render()
-    return { render, close }
+    return { render }
   }
 
-  // ─── Sparklines do funil ───────────────────────────────────────────────────
-  // Abaixo de 3 meses o eixo é o dia; de 3 meses em diante, o mês (mesma regra
-  // de `sparklineGrain` na tela real: até 89 dias, dia; acima, mês).
-  function buildSparkTrends(report) {
-    const isDaily = report.days <= 89
-    const stageDefs = report.funnel.stages
-
-    // No eixo mensal o traço usa os buckets mensais; no eixo diário, a série
-    // diária — a mesma do gráfico "Evolução por dia", e ela fecha no total do
-    // card.
-    const axisDates = isDaily
-      ? report.funnel.byDay.map(row => row.date)
-      : report.funnel.byMonth.map(row => row.date)
-
-    const valuesFor = key => {
-      if (isDaily) return report.funnel.byDay.map(row => row[key] ?? 0)
-      return report.funnel.byMonth.map(row => row[key] ?? 0)
-    }
-
-    // Teto compartilhado em raiz quadrada: o estágio maior define o topo e os
-    // pequenos sobem sem sumir contra o chão — a escala é forma, não leitura.
-    const sharedPeak = Math.max(1, ...stageDefs.flatMap(stage => valuesFor(stage.key)))
-
-    const trends = {}
-    stageDefs.forEach(stage => {
-      const values = valuesFor(stage.key)
-      trends[stage.id] = values.map((value, index) => ({
-        date: axisDates[index],
-        value,
-        level: value === 0 ? 0 : Math.sqrt(value / sharedPeak) * 100,
-      }))
-    })
-
-    // Visitantes na própria escala, nos mesmos buckets do funil. Dias sem
-    // sessão no GA não vêm na série, mas o total do mês é o total: somar os
-    // dias com visita é a leitura correta do bucket.
-    const visitorBuckets = new Map()
-    report.visitors.byDay.forEach(row => {
-      const key = row.date.slice(0, 7)
-      visitorBuckets.set(key, (visitorBuckets.get(key) ?? 0) + row.visitors)
-    })
-
-    const visitorValues = axisDates.map(axisDate => {
-      if (isDaily) {
-        return report.visitors.byDay.find(row => row.date === axisDate)?.visitors ?? 0
-      }
-      return visitorBuckets.get(axisDate.slice(0, 7)) ?? 0
-    })
-
-    const visitorPeak = Math.max(1, ...visitorValues)
-    trends.visits = visitorValues.map((value, index) => ({
-      date: axisDates[index],
-      value,
-      level: value === 0 ? 0 : Math.sqrt(value / visitorPeak) * 100,
-    }))
-
-    return trends
-  }
-
-  // ─── Bloco do funil ────────────────────────────────────────────────────────
-  const STAGE_META = {
-    leads: { label: T.stage_leads, help: T.stage_leads_help },
-    qualified_leads: { label: T.stage_qualified, help: T.stage_qualified_help },
-    opportunities: { label: T.stage_opportunities, help: T.stage_opportunities_help },
-    sales: { label: T.stage_sales, help: T.stage_sales_help },
-  }
-
-  function variationPill(variationPct) {
-    if (variationPct === null || variationPct === undefined) return null
-    if (variationPct === 0) {
-      return h('div', { class: 'pill pill--neutral' }, [
-        h('span', { text: '0%' }),
-        h('span', { class: 'pill__suffix', text: T.kpi_previous_period }),
-      ])
-    }
-    const isGood = variationPct > 0
-    const sign = variationPct > 0 ? '+' : '−'
-    return h('div', { class: `pill ${isGood ? 'pill--good' : 'pill--bad'}` }, [
-      h('span', { text: `${sign}${percent.format(Math.abs(variationPct))}%` }),
-      h('span', { class: 'pill__suffix', text: T.kpi_previous_period }),
-    ])
-  }
-
-  function kpiCard({ label, help, value, previousValue, variationPct, trend, status, message }) {
-    const card = h('div', { class: 'card kpi-card' })
-
-    card.appendChild(
-      h('div', { class: 'block-title' }, [
-        h('h3', { text: label }),
-        help ? helpButton(help) : null,
-      ]),
-    )
-
-    if (status === 'unavailable') {
-      card.appendChild(h('p', { class: 'number-card__hint', text: message, style: 'margin-top:auto' }))
-      return card
-    }
-
-    card.appendChild(h('p', { class: 'kpi-card__value', text: integer.format(value) }))
-
-    if (variationPct !== null && variationPct !== undefined) {
-      card.appendChild(variationPill(variationPct))
-    }
-
-    const spark = h('div', { class: 'kpi-card__spark', role: 'img' })
-    spark.setAttribute(
-      'aria-label',
-      `${label}: ${integer.format(value)}. Tendência de ${trend.length} ${
-        trend.length === 1 ? 'ponto' : 'pontos'
-      }.`,
-    )
-    card.appendChild(spark)
-    requestAnimationFrame(() => window.PocCharts.sparkline(spark, trend))
-
-    return card
-  }
-
-  function renderFunnel(container, report, residentsVisitors) {
-    const trends = buildSparkTrends(report)
-
-    const cards = []
-
-    // Visitantes: card próprio, com estado próprio (a integração é opcional).
-    if (residentsVisitors.connected) {
-      cards.push(
-        kpiCard({
-          label: T.stage_visits,
-          help: T.stage_visits_help,
-          value: report.visitors.total,
-          previousValue: report.visitors.previousTotal,
-          variationPct: report.visitors.variationPct,
-          trend: trends.visits,
-        }),
-      )
-    } else {
-      cards.push(
-        kpiCard({
-          label: T.stage_visits,
-          help: T.stage_visits_help,
-          status: 'unavailable',
-          message: T.visitors_not_connected,
-        }),
-      )
-    }
-
-    report.funnel.stages.forEach(stage => {
-      cards.push(
-        kpiCard({
-          label: STAGE_META[stage.id].label,
-          help: STAGE_META[stage.id].help,
-          value: stage.value,
-          previousValue: stage.previousValue,
-          variationPct: stage.variationPct,
-          trend: trends[stage.id],
-        }),
-      )
-    })
-
-    const source = report.period.previousStartDate
-      ? T.source_comparison(
-          fmtDate(report.period.startDate),
-          fmtDate(report.period.endDate),
-          fmtDate(report.period.previousStartDate),
-          fmtDate(report.period.previousEndDate),
-        )
-      : T.source(fmtDate(report.period.startDate), fmtDate(report.period.endDate))
-
-    container.replaceChildren(
-      h('div', { class: 'kpis' }, [h('div', { class: 'kpis__grid', role: 'group' }, cards)]),
-      h('p', { class: 'source-note', text: source }),
-    )
-  }
-
-  // ─── Evolução por dia ──────────────────────────────────────────────────────
-  const DAILY_SERIES = [
-    { key: 'visitors', label: T.series_visitors, color: 'var(--warning-text)', defaultSelected: false, widensScale: true },
-    { key: 'leads', label: T.series_leads, color: 'var(--neutral-icon-high-emphasis)', defaultSelected: true },
-    { key: 'qualifiedLeads', label: T.series_qualified, color: 'var(--success-text)', defaultSelected: true },
-    { key: 'opportunities', label: T.series_opportunities, color: 'var(--primary-text)', defaultSelected: true },
-    { key: 'sales', label: T.series_sales, color: 'var(--highlight-text)', defaultSelected: true },
+  // ─── Séries do bloco de desempenho ─────────────────────────────────────────
+  const SERIES = [
+    {
+      id: 'visits',
+      dataKey: 'visitors',
+      labelKey: 'funnel_stage_visits',
+      helpKey: 'funnel_stage_visits_help',
+      color: 'var(--warning-text)',
+      // Eixo próprio: visitante é outra ordem de grandeza e achataria as etapas.
+      axis: 'right',
+    },
+    {
+      id: 'leads',
+      dataKey: 'leads',
+      labelKey: 'funnel_stage_leads',
+      helpKey: 'funnel_stage_leads_help',
+      color: 'var(--neutral-icon-high-emphasis)',
+    },
+    {
+      id: 'qualified_leads',
+      dataKey: 'qualified_leads',
+      labelKey: 'funnel_stage_qualified_leads',
+      helpKey: 'funnel_stage_qualified_leads_help',
+      color: 'var(--success-text)',
+    },
+    {
+      id: 'opportunities',
+      dataKey: 'opportunities',
+      labelKey: 'funnel_stage_opportunities',
+      helpKey: 'funnel_stage_opportunities_help',
+      color: 'var(--primary-text)',
+    },
+    {
+      id: 'sales',
+      dataKey: 'sales',
+      labelKey: 'funnel_stage_sales',
+      helpKey: 'funnel_stage_sales_help',
+      color: 'var(--highlight-text)',
+    },
   ]
 
-  function buildDailyPoints(report) {
-    const visitorsByDate = new Map(report.visitors.byDay.map(row => [row.date, row.visitors]))
-    return report.funnel.byDay.map(row => ({
-      date: row.date,
-      leads: row.leads,
-      // A série diária da API usa o mesmo nome de estágio do funil mensal.
-      qualifiedLeads: row.qualified_leads ?? row.qualified ?? 0,
-      opportunities: row.opportunities,
-      sales: row.sales,
-      visitors: visitorsByDate.get(row.date) ?? 0,
-    }))
+  const CONV_SERIES = [
+    { dataKey: 'conversions', labelKey: 'conv_series_leads', color: 'var(--neutral-icon-high-emphasis)' },
+    { dataKey: 'opportunities', labelKey: 'conv_series_opportunities', color: 'var(--primary-text)' },
+    { dataKey: 'customers', labelKey: 'conv_series_customers', color: 'var(--highlight-text)' },
+  ]
+
+  // Taxas da visão "Taxas": mesma ordem do funil e mesmas cores dos estágios.
+  const RATE_DEFS = [
+    {
+      key: 'qualification',
+      labelKey: 'conversion_rate_qualification',
+      helpKey: 'conversion_rate_qualification_help',
+      color: 'var(--success-text)',
+    },
+    {
+      key: 'opportunity',
+      labelKey: 'conversion_rate_opportunity',
+      helpKey: 'conversion_rate_opportunity_help',
+      color: 'var(--primary-text)',
+    },
+    {
+      key: 'win',
+      labelKey: 'conversion_rate_win',
+      helpKey: 'conversion_rate_win_help',
+      color: 'var(--highlight-text)',
+    },
+  ]
+
+  const BAND_LABEL_KEY = {
+    dentro: 'conversion_band_dentro',
+    acima: 'conversion_band_acima',
+    abaixo: 'conversion_band_abaixo',
+    insuficiente: 'conversion_band_insuficiente',
   }
 
-  function renderDaily(container, report, residentsVisitors, selected) {
-    const points = buildDailyPoints(report)
-    const totals = points.reduce(
-      (acc, point) => ({
-        visitors: acc.visitors + point.visitors,
-        leads: acc.leads + point.leads,
-        qualifiedLeads: acc.qualifiedLeads + point.qualifiedLeads,
-        opportunities: acc.opportunities + point.opportunities,
-        sales: acc.sales + point.sales,
-      }),
-      { visitors: 0, leads: 0, qualifiedLeads: 0, opportunities: 0, sales: 0 },
-    )
-
-    // O controle de visitantes só existe quando a série existe: um checkbox
-    // que não muda o gráfico seria decorativo.
-    const available = residentsVisitors.connected
-      ? DAILY_SERIES
-      : DAILY_SERIES.filter(item => item.key !== 'visitors')
-
-    const visible = available.filter(item => selected.has(item.key))
-
-    const toggles = h('div', {
-      class: 'series-toggles',
-      role: 'group',
-      'aria-label': 'Séries para comparar',
-    })
-
-    available.forEach(item => {
-      const pressed = selected.has(item.key)
-      toggles.appendChild(
-        h(
-          'div',
-          {
-            class: 'series-toggle',
-            'data-selected': String(pressed),
-            style: `--series-color: ${item.color}`,
-          },
-          [
-            h(
-              'label',
-              { class: 'series-toggle__label' },
-              [
-                h('input', {
-                  type: 'checkbox',
-                  checked: pressed ? 'checked' : null,
-                  onchange: () => {
-                    const next = new Set(selected)
-                    if (next.has(item.key)) next.delete(item.key)
-                    else next.add(item.key)
-                    renderDaily(container, report, residentsVisitors, next)
-                  },
-                }),
-                h('span', { class: 'checkbox', html: ICONS.check }),
-                h('span', { class: 'series-toggle__copy' }, [
-                  h('span', { class: 'series-toggle__name' }, [
-                    h('span', { text: item.label }),
-                  ]),
-                  h('span', { class: 'series-toggle__count', text: integer.format(totals[item.key]) }),
-                  h('span', {
-                    class: 'series-toggle__swatch',
-                    'aria-hidden': 'true',
-                  }),
-                ]),
-              ],
-            ),
-          ],
-        ),
-      )
-    })
-
-    if (available.some(item => item.widensScale && selected.has(item.key))) {
-      toggles.appendChild(h('p', { class: 'series-scale-note', text: T.daily_widens_scale }))
-    }
-
-    const chart = h('div', { class: 'chart' })
-    requestAnimationFrame(() =>
-      window.PocCharts.areaChart(chart, {
-        points,
-        series: visible,
-        height: 280,
-        emptyText: T.daily_none,
-        ariaLabel: T.daily_period(fmtDate(report.period.startDate), fmtDate(report.period.endDate)),
-      }),
-    )
-
-    container.replaceChildren(
-      h('div', { class: 'block-head' }, [
-        blockTitle(T.daily_title, T.daily_help),
-        h('p', {
-          class: 'block-period',
-          text: T.daily_period(fmtDate(report.period.startDate), fmtDate(report.period.endDate)),
-        }),
-      ]),
-      h('div', { class: 'card card--lg' }, [toggles, chart]),
-    )
-
-    const chartNode = container.querySelector('.chart')
-    if (chartNode && !chartNode.dataset.observed) {
-      chartNode.dataset.observed = 'true'
-      window.PocCharts.observeResize(chartNode, () => {
-        window.PocCharts.areaChart(chartNode, {
-          points,
-          series: visible,
-          height: 280,
-          emptyText: T.daily_none,
-          ariaLabel: T.daily_period(fmtDate(report.period.startDate), fmtDate(report.period.endDate)),
-        })
-      })
-    }
+  const BAND_PILL = {
+    acima: {
+      background: 'var(--success-surface-low-emphasis)',
+      color: 'var(--success-text)',
+    },
+    dentro: {
+      background: 'var(--primary-surface-low-emphasis)',
+      color: 'var(--primary-text)',
+    },
+    abaixo: {
+      background: 'var(--danger-surface-low-emphasis)',
+      color: 'var(--danger-text)',
+    },
+    insuficiente: {
+      background: 'var(--neutral-surface-low-emphasis)',
+      color: 'var(--neutral-text-low-emphasis)',
+    },
   }
 
-  // ─── Faixa esperada ────────────────────────────────────────────────────────
-  const BAND_RATE_LABELS = {
-    qualification: T.band_rate_qualification,
-    opportunity: T.band_rate_opportunity,
-    win: T.band_rate_win,
-  }
-
-  const BAND_LABELS = {
-    dentro: T.band_dentro,
-    acima: T.band_acima,
-    abaixo: T.band_abaixo,
-    insuficiente: T.band_insuficiente,
-  }
-
-  const BAND_POINT_COLOR = {
+  const BAND_MARK = {
     acima: 'var(--success-icon)',
     dentro: 'var(--primary-icon)',
     abaixo: 'var(--danger-icon)',
     insuficiente: 'var(--neutral-icon-low-emphasis)',
   }
 
-  const pct1 = value =>
-    value === null || value === undefined
-      ? '—'
-      : `${new Intl.NumberFormat('pt-BR', {
-          minimumFractionDigits: 1,
-          maximumFractionDigits: 1,
-        }).format(value * 100)}%`
-
-  function bandCard(rateItem) {
-    const domainMax = Math.max(rateItem.high ?? 0, rateItem.observed ?? 0) * 1.15 || 1
-    const at = value => Math.min(100, Math.max(0, (value / domainMax) * 100))
-
-    const track =
-      rateItem.low !== null && rateItem.high !== null
-        ? h('div', { class: 'band-track', 'aria-hidden': 'true' }, [
-            h('div', { class: 'band-track__rail' }),
-            h('div', {
-              class: 'band-track__range',
-              style: `left:${at(rateItem.low)}%;width:${Math.max(0, at(rateItem.high) - at(rateItem.low))}%`,
-            }),
-            h('div', {
-              class: 'band-track__point',
-              style: `left:${at(rateItem.observed)}%;background:${BAND_POINT_COLOR[rateItem.band]}`,
-            }),
-          ])
-        : null
-
-    return h('div', { class: 'card band-card' }, [
-      h('p', { class: 'band-card__title', text: BAND_RATE_LABELS[rateItem.id] }),
-      h('div', { class: 'band-card__head' }, [
-        h('p', { class: 'band-card__value', text: pct1(rateItem.observed) }),
-        h('span', {
-          class: `pill band-pill--${rateItem.band}`,
-          text: BAND_LABELS[rateItem.band],
-        }),
-      ]),
-      track,
-      h('div', { class: 'band-card__note' }, [
-        h('p', {
-          text:
-            rateItem.band === 'insuficiente'
-              ? T.band_note_insufficient(rateItem.trials)
-              : T.band_note(pct1(rateItem.low), pct1(rateItem.high)),
-        }),
-        rateItem.band !== 'insuficiente' ? helpButton(T.band_note_help) : null,
-      ]),
-    ])
+  // ─── Pontos diários e transformações de série ──────────────────────────────
+  function dailyPoints(report) {
+    const visitorsByDate = new Map((report.visitors.byDay ?? []).map(row => [row.date, row.visitors]))
+    return report.byDay.map(row => ({
+      date: row.date,
+      visitors: visitorsByDate.get(row.date) ?? 0,
+      leads: row.leads,
+      qualified_leads: row.qualified_leads,
+      opportunities: row.opportunities,
+      sales: row.sales,
+    }))
   }
 
-  function renderBands(container, report) {
-    const head = h('div', { class: 'block-head' }, [
-      blockTitle(T.bands_title),
-      h('p', { class: 'block-period', text: T.bands_subtitle }),
-    ])
-
-    if (!report.bandsAllowed) {
-      container.replaceChildren(
-        head,
-        h('div', { class: 'card' }, [
-          h('p', { class: 'number-card__hint', text: T.bands_limit }),
-        ]),
-      )
-      return
-    }
-
-    container.replaceChildren(
-      head,
-      h('div', { class: 'kpis' }, [
-        h(
-          'div',
-          { class: 'kpis__grid', role: 'group', 'aria-label': T.bands_title },
-          report.bands.map(bandCard),
-        ),
-      ]),
+  function visibleSeries(report) {
+    return SERIES.filter(
+      item => (item.id !== 'visits' || report.visitors.connected) && state.selected.has(item.id),
     )
   }
 
-  // ─── Conversões ────────────────────────────────────────────────────────────
-  const CONV_SERIES = [
-    { key: 'conversions', label: T.conv_series_leads, color: 'var(--neutral-icon-high-emphasis)' },
-    { key: 'opportunities', label: T.conv_series_opportunities, color: 'var(--primary-text)' },
-    { key: 'customers', label: T.conv_series_customers, color: 'var(--highlight-text)' },
-  ]
-
-  function renderConversions(kpisContainer, chartContainer, report, selected) {
-    const period = report.period
-    const periodLine = () =>
-      h('p', {
-        class: 'block-period',
-        text: T.daily_period(fmtDate(period.startDate), fmtDate(period.endDate)),
+  function toCumulative(points, keys) {
+    const running = {}
+    keys.forEach(key => {
+      running[key] = 0
+    })
+    return points.map(point => {
+      const row = { ...point }
+      keys.forEach(key => {
+        running[key] += point[key] ?? 0
+        row[key] = running[key]
       })
+      return row
+    })
+  }
 
-    const numberCard = (title, hint, value) =>
-      h('div', { class: 'block' }, [
-        h('div', {}, [blockTitle(title, hint), periodLine()]),
-        h('div', { class: 'card card--text' }, [
-          h('p', { class: 'number-card__hint', text: hint }),
-          h('p', { class: 'number-card__value', text: integer.format(value) }),
-        ]),
+  // Projeção linear até o fim do mês, só com os pontos diários já carregados.
+  const DAY_MS = 86400000
+  const isoToDate = iso => new Date(`${iso}T12:00:00Z`)
+  const dateToIso = value => value.toISOString().slice(0, 10)
+
+  function monthEndIso(iso) {
+    const value = isoToDate(iso)
+    return dateToIso(new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + 1, 0, 12)))
+  }
+
+  function nextIso(iso) {
+    const value = isoToDate(iso)
+    value.setUTCDate(value.getUTCDate() + 1)
+    return dateToIso(value)
+  }
+
+  function isDailySeries(points) {
+    if (points.length < 2) return true
+    return nextIso(points[points.length - 2].date) === points[points.length - 1].date
+  }
+
+  function canProjectMonth(points, today) {
+    if (!points?.length || !isDailySeries(points)) return false
+    const last = points[points.length - 1].date
+    if (!last || last < today || last.slice(0, 7) !== today.slice(0, 7)) return false
+    return last < monthEndIso(today)
+  }
+
+  function withMonthProjection(points, keys, today) {
+    if (!canProjectMonth(points, today) || !keys.length) return { points, active: false }
+
+    const last = points[points.length - 1]
+    const pointIsZero = keys.every(key => !last[key])
+    const sample = last.date === today && pointIsZero ? points.slice(0, -1) : points
+    const base = sample.length ? sample : points
+    const means = {}
+    keys.forEach(key => {
+      const total = base.reduce((sum, point) => sum + (point[key] ?? 0), 0)
+      means[key] = Math.round(total / base.length)
+    })
+
+    const bridgeAt = sample.length ? sample.length - 1 : points.length - 1
+    const stamped = points.map((point, index) => {
+      const row = { ...point }
+      keys.forEach(key => {
+        row[`${key}Forecast`] = index === bridgeAt ? means[key] : null
+      })
+      return row
+    })
+
+    const extra = []
+    let cursor = nextIso(last.date)
+    const end = monthEndIso(today)
+    while (cursor <= end) {
+      const row = { date: cursor, projected: true }
+      keys.forEach(key => {
+        row[key] = null
+        row[`${key}Forecast`] = means[key]
+      })
+      extra.push(row)
+      cursor = nextIso(cursor)
+    }
+
+    return { points: [...stamped, ...extra], active: extra.length > 0, means }
+  }
+
+  // Separa o medido da projeção para as duas coisas não irem no mesmo traço.
+  // O último dia medido entra nos dois, para o tracejado encostar na linha.
+  function splitProjection(points, keys) {
+    let lastMeasured = -1
+    points.forEach((point, index) => {
+      if (!point.projected) lastMeasured = index
+    })
+
+    const current = []
+    const forecast = []
+    points.forEach((point, index) => {
+      const measured = { date: point.date }
+      const projected = { date: point.date }
+      keys.forEach(key => {
+        measured[key] = point.projected ? null : point[key] ?? null
+        // Nos dias projetados o valor medido é null; o número do tracejado vem
+        // de `keyForecast` (a média diária). No último dia medido os dois
+        // conjuntos têm valor, para o tracejado encostar na linha sólida.
+        if (point.projected) {
+          projected[key] = point[`${key}Forecast`] ?? null
+        } else {
+          projected[key] = index === lastMeasured ? point[key] ?? null : null
+        }
+      })
+      current.push(measured)
+      forecast.push(projected)
+    })
+    return { current, forecast }
+  }
+
+  // Acumulado com projeção: a soma corrida acontece sobre a série inteira
+  // (medida + prevista) e só depois é partida nos dois traços.
+  function cumulativeProjection(points, keys) {
+    const running = {}
+    keys.forEach(key => {
+      running[key] = 0
+    })
+    let lastMeasured = -1
+    points.forEach((point, index) => {
+      if (!point.projected) lastMeasured = index
+    })
+
+    const current = []
+    const forecast = []
+    points.forEach((point, index) => {
+      const currentRow = { date: point.date }
+      const forecastRow = { date: point.date }
+      keys.forEach(key => {
+        const value = point.projected ? point[`${key}Forecast`] ?? 0 : point[key] ?? 0
+        running[key] += value
+        currentRow[key] = point.projected ? null : running[key]
+        forecastRow[key] = point.projected || index === lastMeasured ? running[key] : null
+      })
+      current.push(currentRow)
+      forecast.push(forecastRow)
+    })
+    return { current, forecast }
+  }
+
+  // Sobrepõe a série anterior à atual, alinhando por POSIÇÃO no período.
+  function alignComparison(points, previousPoints, keys, forecastPoints) {
+    const current = points ?? []
+    const previous = previousPoints ?? []
+    const forecast = forecastPoints ?? []
+    const length = Math.max(current.length, previous.length, forecast.length)
+
+    return Array.from({ length }, (_, index) => {
+      const row = { date: `D${index + 1}`, index }
+      keys.forEach(key => {
+        row[key] = current[index]?.[key] ?? null
+        row[`${key}Previous`] = previous[index]?.[key] ?? null
+        if (forecastPoints) row[`${key}Forecast`] = forecast[index]?.[key] ?? null
+      })
+      return row
+    })
+  }
+
+  function performanceRows(report, comparison) {
+    const visible = visibleSeries(report)
+    const keys = visible.map(item => item.dataKey)
+    const today = localTodayIso()
+    let current = dailyPoints(report)
+    let forecast = []
+    let projectionActive = false
+
+    if (state.comparing && data.isMonthToDate(report.period) && keys.length) {
+      const projection = withMonthProjection(current, keys, today)
+      projectionActive = projection.active
+      if (projection.active) {
+        if (state.view === 'cumulative') {
+          const cumulative = cumulativeProjection(projection.points, keys)
+          current = cumulative.current
+          forecast = cumulative.forecast
+        } else {
+          const split = splitProjection(projection.points, keys)
+          current = split.current
+          forecast = split.forecast
+        }
+      }
+    } else if (state.view === 'cumulative') {
+      current = toCumulative(current, keys)
+    }
+
+    let previous = comparison ? dailyPoints(comparison) : []
+    if (state.view === 'cumulative' && comparison) previous = toCumulative(previous, keys)
+
+    const comparing = Boolean(state.comparing && previous.length)
+    const rows = comparing
+      ? alignComparison(current, previous, keys, forecast.length ? forecast : undefined)
+      : current.map(point => {
+          const row = { date: point.date }
+          keys.forEach(key => {
+            row[key] = point[key]
+          })
+          return row
+        })
+
+    return { visible, keys, rows, projectionActive, comparing }
+  }
+
+  function chartSeries(visible) {
+    return visible.map(item => ({
+      key: item.dataKey,
+      label: T[item.labelKey],
+      color: item.color,
+      axis: item.axis,
+    }))
+  }
+
+  function drawPerformanceChart(container, report, comparison) {
+    const model = performanceRows(report, comparison)
+    if (!model.visible.length) return
+    window.PocCharts.areaChart(container, {
+      points: model.rows,
+      series: chartSeries(model.visible),
+      emptyText: T.daily_series_none_selected,
+      ariaLabel: T.performance_chart_aria(
+        fmtDate(report.period.startDate),
+        fmtDate(report.period.endDate),
+      ),
+    })
+  }
+
+  // ─── Cards de KPI (também são os controles das séries) ─────────────────────
+  function variationPill(variationPct, hasPrevious) {
+    if (!hasPrevious) return null
+    if (variationPct === null || variationPct === undefined) {
+      return h('div', { class: 'pill pill--neutral' }, [h('span', { text: T.marketing_kpi_no_variation })])
+    }
+    if (variationPct === 0) {
+      return h('div', { class: 'pill pill--neutral' }, [
+        h('span', { text: signedPercent(0) }),
+        h('span', { class: 'pill__suffix', text: T.marketing_kpi_previous_period }),
       ])
+    }
+    const good = variationPct > 0
+    return h('div', { class: `pill ${good ? 'pill--good' : 'pill--bad'}` }, [
+      h('span', { text: signedPercent(variationPct) }),
+      h('span', { class: 'pill__suffix', text: T.marketing_kpi_previous_period }),
+    ])
+  }
 
-    const visible = CONV_SERIES.filter(item => selected.has(item.key))
-    const totals = report.conversions.byDay.reduce(
-      (acc, row) => ({
-        conversions: acc.conversions + row.conversions,
-        opportunities: acc.opportunities + row.opportunities,
-        customers: acc.customers + row.customers,
+  const STAGE_RATE_PHRASE = {
+    leads: T.funnel_rate_of_visits,
+    qualified_leads: T.funnel_rate_of_leads,
+    opportunities: T.funnel_rate_of_qualified,
+    sales: T.funnel_rate_of_opportunities,
+  }
+
+  function kpiCard({ id, label, help, value, previousValue, variationPct, stageRate, selectable }) {
+    const card = h('div', {
+      class: `card af-kpi-card${selectable ? ' af-kpi-toggle' : ''}`,
+      'data-selected': selectable ? String(state.selected.has(id)) : null,
+      onclick: selectable ? () => toggleSeries(id) : null,
+    })
+
+    const title = h('div', { class: 'af-metric-title' }, [
+      selectable
+        ? h(
+            'span',
+            {
+              class: 'af-kpi-check',
+              onclick: event => event.stopPropagation(),
+              onkeydown: event => event.stopPropagation(),
+            },
+            [
+              checkControl({
+                checked: state.selected.has(id),
+                onChange: () => toggleSeries(id),
+                ariaLabel: T.marketing_kpi_series_toggle(label),
+              }),
+            ],
+          )
+        : null,
+      h('h3', { text: label }),
+      help
+        ? h(
+            'span',
+            {
+              onclick: event => event.stopPropagation(),
+              onkeydown: event => event.stopPropagation(),
+              style: 'display:inline-flex',
+            },
+            [helpButton(help)],
+          )
+        : null,
+    ])
+
+    card.appendChild(title)
+    card.appendChild(h('p', { class: 'af-kpi-card__value', text: integer.format(value) }))
+    const pill = variationPill(variationPct, previousValue !== null && previousValue !== undefined)
+    if (pill) card.appendChild(pill)
+    if (previousValue !== null && previousValue !== undefined) {
+      card.appendChild(
+        h('p', {
+          class: 'af-kpi-card__previous',
+          text: T.marketing_kpi_previous_amount(integer.format(previousValue)),
+        }),
+      )
+    }
+    if (stageRate !== null && stageRate !== undefined) {
+      card.appendChild(
+        h('p', {
+          class: 'af-kpi-card__rate',
+          text: `${pct2(stageRate)} ${STAGE_RATE_PHRASE[id]}`,
+        }),
+      )
+    }
+    return card
+  }
+
+  function unavailableVisitorCard() {
+    return h('div', { class: 'card af-kpi-card', 'data-status': 'unavailable' }, [
+      h('div', { class: 'af-metric-title' }, [
+        h('h3', { text: T.funnel_stage_visits }),
+        helpButton(T.funnel_stage_visits_help),
+      ]),
+      h('p', { class: 'af-kpi-card__message', text: T.visitors_not_connected }),
+    ])
+  }
+
+  function kpiCards(report, selectable) {
+    const cards = []
+    if (report.visitors.connected) {
+      cards.push(
+        kpiCard({
+          id: 'visits',
+          label: T.funnel_stage_visits,
+          help: T.funnel_stage_visits_help,
+          value: report.visitors.total,
+          previousValue: report.visitors.previousTotal,
+          variationPct: report.visitors.variationPct,
+          selectable,
+        }),
+      )
+    } else {
+      cards.push(unavailableVisitorCard())
+    }
+
+    const byId = new Map(report.stages.map(stage => [stage.id, stage]))
+    const stageRate = (id, numerator, denominator) => {
+      const base = byId.get(denominator)
+      if (!base || !base.value) return null
+      return numerator / base.value
+    }
+
+    const leads = byId.get('leads')
+    const qualified = byId.get('qualified_leads')
+    const opportunities = byId.get('opportunities')
+    const sales = byId.get('sales')
+    const visitorsRate =
+      report.visitors.connected && report.visitors.total > 0
+        ? leads.value / report.visitors.total
+        : null
+
+    const rateOf = {
+      leads: visitorsRate,
+      qualified_leads: stageRate('qualified_leads', qualified.value, 'leads'),
+      opportunities: stageRate('opportunities', opportunities.value, 'qualified_leads'),
+      sales: stageRate('sales', sales.value, 'opportunities'),
+    }
+
+    report.stages.forEach(stage => {
+      cards.push(
+        kpiCard({
+          id: stage.id,
+          label: T[`funnel_stage_${stage.id}`],
+          help: T[`funnel_stage_${stage.id}_help`],
+          value: stage.value,
+          previousValue: stage.previousValue,
+          variationPct: stage.variationPct,
+          stageRate: rateOf[stage.id],
+          selectable,
+        }),
+      )
+    })
+
+    return cards
+  }
+
+  function toggleSeries(id) {
+    if (state.view === 'rates') return
+    const next = new Set(state.selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    state.selected = next
+    renderPanel()
+  }
+
+  // ─── Visão de taxas ────────────────────────────────────────────────────────
+  function bandTrack(item) {
+    if (item.low === null || item.high === null || item.observed === null) return null
+    const domainMax = Math.max(item.high, item.observed) * 1.15 || 1
+    const at = value => Math.min(100, Math.max(0, (value / domainMax) * 100))
+    return h('div', { class: 'af-performance__band-track', 'aria-hidden': 'true' }, [
+      h('div', {
+        class: 'af-performance__band-range',
+        style: `left:${at(item.low)}%;width:${Math.max(0, at(item.high) - at(item.low))}%`,
+      }),
+      h('div', {
+        class: 'af-performance__band-dot',
+        style: `left:${at(item.observed)}%;background:${BAND_MARK[item.band]}`,
+      }),
+    ])
+  }
+
+  function rateCards(report) {
+    return h(
+      'div',
+      { class: 'af-performance__rate-cards' },
+      RATE_DEFS.map(def => {
+        const item = report.bands.find(entry => entry.id === def.key)
+        const tone = BAND_PILL[item?.band] ?? BAND_PILL.insuficiente
+        const card = h('div', { class: 'af-performance__rate-card' }, [
+          h('div', { class: 'af-metric-title' }, [
+            h('span', {
+              class: 'af-daily-series-toggle__swatch',
+              'aria-hidden': 'true',
+              style: `--series-color: ${def.color}`,
+            }),
+            h('span', { class: 'af-performance__rate-label', text: T[def.labelKey] }),
+            helpButton(T[def.helpKey]),
+          ]),
+          h('div', { class: 'af-performance__rate-value' }, [
+            h('span', {
+              class: 'af-performance__rate-number',
+              text: item ? pct1(item.observed ?? 0) : '—',
+            }),
+            item
+              ? h('span', {
+                  class: 'af-performance__band-pill',
+                  text: T[BAND_LABEL_KEY[item.band]],
+                  style: `background:${tone.background};color:${tone.color}`,
+                })
+              : null,
+          ]),
+          item ? bandTrack(item) : null,
+          item
+            ? h('div', { class: 'af-performance__rate-note' }, [
+                h('span', {
+                  text:
+                    item.band === 'insuficiente'
+                      ? T.conversion_band_note_insufficient(item.trials)
+                      : T.conversion_band_note(pct1(item.low ?? 0), pct1(item.high ?? 0)),
+                }),
+                item.band !== 'insuficiente' ? helpButton(T.conversion_band_note_help) : null,
+              ])
+            : null,
+        ])
+        return card
+      }),
+    )
+  }
+
+  // ─── Bloco de desempenho ───────────────────────────────────────────────────
+  function renderPerformance(report, comparison) {
+    const selectable = state.view !== 'rates'
+    const section = h('section', {
+      class: 'af-performance',
+      'data-view': state.view,
+      'aria-label': T.performance_title,
+    })
+
+    section.appendChild(
+      h('div', { class: 'af-marketing-kpis' }, [
+        h(
+          'div',
+          {
+            class: 'af-marketing-kpis__grid',
+            role: 'group',
+            'aria-label': 'Indicadores de marketing',
+          },
+          kpiCards(report, selectable),
+        ),
+      ]),
+    )
+
+    const chartCard = h('div', { class: 'card af-performance__chart-card' })
+
+    const controls = h('div', { class: 'af-performance__controls' }, [
+      h(
+        'div',
+        {
+          role: 'radiogroup',
+          'aria-label': T.performance_view_label,
+          class: 'af-performance__views',
+        },
+        [
+          ['daily', T.performance_view_daily],
+          ['cumulative', T.performance_view_cumulative],
+          ['rates', T.performance_view_rates],
+        ].map(([id, label]) =>
+          h('button', {
+            type: 'button',
+            role: 'radio',
+            class: 'af-performance__view',
+            'data-selected': String(state.view === id),
+            'aria-checked': String(state.view === id),
+            text: label,
+            onclick: () => {
+              if (state.view === id) return
+              state.view = id
+              renderPanel()
+            },
+          }),
+        ),
+      ),
+      state.view !== 'rates'
+        ? h('div', { class: 'af-performance__compare' }, [
+            checkControl({
+              checked: state.comparing,
+              onChange: () => {
+                state.comparing = !state.comparing
+                renderPanel()
+              },
+              label: T.performance_compare_toggle,
+            }),
+            state.comparing ? helpButton(T.performance_compare_help) : null,
+          ])
+        : null,
+    ])
+    chartCard.appendChild(controls)
+
+    if (state.view === 'rates') {
+      chartCard.appendChild(
+        h('p', { class: 'af-performance__rates-subtitle', text: T.conversion_bands_subtitle }),
+      )
+      chartCard.appendChild(
+        report.bandsAllowed
+          ? rateCards(report)
+          : h('p', { class: 'af-performance__blocked', text: T.conversion_bands_period_limit }),
+      )
+    } else {
+      const visible = visibleSeries(report)
+      if (!visible.length) {
+        chartCard.appendChild(
+          h('p', { class: 'af-performance__none', text: T.daily_series_none_selected }),
+        )
+      } else {
+        const chart = h('div', { class: 'af-performance__chart' })
+        chartCard.appendChild(chart)
+        const draw = () => drawPerformanceChart(chart, report, comparison)
+        requestAnimationFrame(draw)
+        chartDraws.push(draw)
+      }
+    }
+
+    const previousWindow =
+      state.comparing && comparison
+        ? comparison.period
+        : null
+    chartCard.appendChild(
+      h('p', {
+        class: 'af-performance__source',
+        text: previousWindow
+          ? T.real_funnel_source_with_comparison(
+              fmtDate(report.period.startDate),
+              fmtDate(report.period.endDate),
+              fmtDate(previousWindow.startDate),
+              fmtDate(previousWindow.endDate),
+            )
+          : T.real_funnel_source(fmtDate(report.period.startDate), fmtDate(report.period.endDate)),
+      }),
+    )
+
+    section.appendChild(chartCard)
+    return section
+  }
+
+  // ─── Conversões ────────────────────────────────────────────────────────────
+  function periodLine(report) {
+    return h('p', {
+      class: 'block-period',
+      text: T.conv_period(fmtDate(report.period.startDate), fmtDate(report.period.endDate)),
+    })
+  }
+
+  function numberBlock(report, title, hint, value) {
+    return h('section', { class: 'conv-number-block' }, [
+      h('div', {}, [metricTitle(title, hint), periodLine(report)]),
+      h('div', { class: 'card conv-number-card' }, [
+        h('p', { class: 'conv-number-card__hint', text: hint }),
+        h('p', { class: 'conv-number-card__value', text: integer.format(value) }),
+      ]),
+    ])
+  }
+
+  function renderConversionKpis(report) {
+    return h('div', { class: 'af-conversion-kpis' }, [
+      h('div', { class: 'af-conversion-kpis__grid' }, [
+        numberBlock(
+          report,
+          T.conv_qualified_title,
+          T.conv_qualified_hint,
+          report.conversions.qualifiedLeads.value,
+        ),
+        numberBlock(
+          report,
+          T.conv_opportunities_title,
+          T.conv_opportunities_hint,
+          report.conversions.opportunities.value,
+        ),
+      ]),
+    ])
+  }
+
+  function seriesToggle({ checked, onChange, label, count, color, ariaLabel }) {
+    // Um único <label> em volta de tudo: clicar no nome também liga/desliga a
+    // série. (Um label do checkbox dentro de outro label seria HTML inválido.)
+    return h(
+      'div',
+      {
+        class: 'af-daily-series-toggle',
+        'data-selected': String(checked),
+        style: `--series-color: ${color || 'var(--neutral-icon-low-emphasis)'}`,
+      },
+      [
+        h('label', { class: 'af-daily-series-toggle__label' }, [
+          h('input', {
+            class: 'check-input',
+            type: 'checkbox',
+            checked: checked ? 'checked' : null,
+            'aria-label': ariaLabel || label,
+            onchange: onChange,
+          }),
+          h('span', { class: 'checkbox', html: ICONS.check }),
+          h('span', { class: 'af-daily-series-toggle__copy' }, [
+            h('span', { class: 'af-daily-series-toggle__name', text: label }),
+            count !== null && count !== undefined
+              ? h('span', { class: 'af-daily-series-toggle__count', text: integer.format(count) })
+              : null,
+            color ? h('span', { class: 'af-daily-series-toggle__swatch', 'aria-hidden': 'true' }) : null,
+          ]),
+        ]),
+      ],
+    )
+  }
+
+  function renderConversionTime(report) {
+    const points = report.conversions.byDay
+    const today = localTodayIso()
+    const selected = state.convSelected
+    const visible = CONV_SERIES.filter(item => selected.has(item.dataKey))
+    const keys = visible.map(item => item.dataKey)
+
+    const totals = points.reduce(
+      (acc, point) => ({
+        conversions: acc.conversions + point.conversions,
+        opportunities: acc.opportunities + point.opportunities,
+        customers: acc.customers + point.customers,
       }),
       { conversions: 0, opportunities: 0, customers: 0 },
     )
 
+    const projection = keys.length
+      ? withMonthProjection(points, keys, today)
+      : { points: [], active: false }
+    const projectedOn = state.convProjection && projection.active
+    const chartPoints = projectedOn ? projection.points : points
+
     const toggles = h('div', {
-      class: 'series-toggles',
+      class: 'af-conversion-series-toggles',
       role: 'group',
-      'aria-label': 'Séries para comparar',
+      'aria-label': T.daily_series_toggle_group,
     })
+
     CONV_SERIES.forEach(item => {
-      const pressed = selected.has(item.key)
       toggles.appendChild(
-        h(
-          'div',
-          {
-            class: 'series-toggle',
-            'data-selected': String(pressed),
-            style: `--series-color: ${item.color}`,
+        seriesToggle({
+          checked: selected.has(item.dataKey),
+          onChange: () => {
+            const next = new Set(state.convSelected)
+            if (next.has(item.dataKey)) next.delete(item.dataKey)
+            else next.add(item.dataKey)
+            state.convSelected = next
+            renderPanel()
           },
-          [
-            h('label', { class: 'series-toggle__label' }, [
-              h('input', {
-                type: 'checkbox',
-                checked: pressed ? 'checked' : null,
-                onchange: () => {
-                  const next = new Set(selected)
-                  if (next.has(item.key)) next.delete(item.key)
-                  else next.add(item.key)
-                  renderConversions(kpisContainer, chartContainer, report, next)
-                },
-              }),
-              h('span', { class: 'checkbox', html: ICONS.check }),
-              h('span', { class: 'series-toggle__copy' }, [
-                h('span', { class: 'series-toggle__name' }, [h('span', { text: item.label })]),
-                h('span', { class: 'series-toggle__count', text: integer.format(totals[item.key]) }),
-                h('span', { class: 'series-toggle__swatch', 'aria-hidden': 'true' }),
-              ]),
-            ]),
-          ],
-        ),
+          label: T[item.labelKey],
+          count: totals[item.dataKey],
+          color: item.color,
+        }),
       )
     })
 
-    const chart = h('div', { class: 'chart' })
-    requestAnimationFrame(() =>
-      window.PocCharts.areaChart(chart, {
-        points: report.conversions.byDay,
-        series: visible,
-        height: 280,
-        emptyText: T.daily_none,
-        ariaLabel: T.conv_over_time_aria(fmtDate(period.startDate), fmtDate(period.endDate)),
-      }),
-    )
-
-    kpisContainer.replaceChildren(
-      h('div', { class: 'conversions-kpis' }, [
-        h('div', { class: 'conversions-kpis__grid' }, [
-          numberCard(T.conv_qualified_title, T.conv_qualified_hint, report.conversions.qualifiedLeads.value),
-          numberCard(T.conv_opportunities_title, T.conv_opportunities_hint, report.conversions.opportunities.value),
-        ]),
-      ]),
-    )
-
-    chartContainer.replaceChildren(
-      h('div', {}, [
-        blockTitle(T.conv_over_time_title, T.conv_over_time_hint),
-        periodLine(),
-        h('p', { class: 'block-period', text: T.conv_over_time_hint, style: 'margin-top:4px' }),
-      ]),
-      h('div', { class: 'card card--lg' }, [toggles, chart]),
-    )
-
-    const chartNode = chartContainer.querySelector('.chart')
-    if (chartNode) {
-      window.PocCharts.observeResize(chartNode, () => {
-        window.PocCharts.areaChart(chartNode, {
-          points: report.conversions.byDay,
-          series: visible,
-          height: 280,
-          emptyText: T.daily_none,
-          ariaLabel: T.conv_over_time_aria(fmtDate(period.startDate), fmtDate(period.endDate)),
-        })
-      })
+    if (projection.active) {
+      toggles.appendChild(
+        seriesToggle({
+          checked: projectedOn,
+          onChange: () => {
+            state.convProjection = !state.convProjection
+            renderPanel()
+          },
+          label: T.daily_projection_toggle,
+          count: null,
+          color: null,
+        }),
+      )
     }
+
+    if (projectedOn) {
+      toggles.appendChild(
+        h('p', { class: 'af-daily-series-scale-note', text: T.daily_projection_help }),
+      )
+    }
+
+    const card = h('div', { class: 'card af-conversion-chart-card' }, [toggles])
+    if (!visible.length) {
+      card.appendChild(
+        h('p', { class: 'af-performance__none', text: T.daily_series_none_selected }),
+      )
+    } else {
+      const chart = h('div', { class: 'af-conversion-chart' })
+      card.appendChild(chart)
+      const draw = () =>
+        window.PocCharts.areaChart(chart, {
+          points: chartPoints,
+          series: chartSeries(visible),
+          emptyText: T.daily_series_none_selected,
+          ariaLabel: T.conv_over_time_aria(
+            fmtDate(report.period.startDate),
+            fmtDate(report.period.endDate),
+          ),
+          forecastDash: '5 4',
+        })
+      requestAnimationFrame(draw)
+      chartDraws.push(draw)
+    }
+
+    return h('section', { class: 'af-daily-series' }, [
+      h('div', {}, [
+        metricTitle(T.conv_over_time_title, T.conv_over_time_hint),
+        periodLine(report),
+        h('p', { class: 'af-conversion-chart-hint', text: T.conv_over_time_hint }),
+      ]),
+      card,
+    ])
   }
 
   // ─── Email ─────────────────────────────────────────────────────────────────
@@ -1012,42 +1417,48 @@
   ]
 
   const EMAIL_TABS = [
-    { id: 'sends', label: T.email_tab_sends, title: T.email_sends_title },
-    { id: 'recent', label: T.email_tab_recent, title: T.email_recent_title },
-    { id: 'clicks', label: T.email_tab_clicks, title: T.email_clicks_title },
+    { id: 'sends', labelKey: 'email_tab_sends', titleKey: 'email_sends_title' },
+    { id: 'recent', labelKey: 'email_tab_recent', titleKey: 'email_recent_title' },
+    { id: 'clicks', labelKey: 'email_tab_clicks', titleKey: 'email_clicks_title' },
   ]
 
-  const tablePercent = new Intl.NumberFormat('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-
-  function metricValue(metric) {
-    if (metric.value === null || metric.value === undefined) return { text: '—', empty: true }
-    return {
-      text: metric.isPercent ? `${tablePercent.format(metric.value)}%` : integer.format(metric.value),
-      empty: false,
-    }
+  function emailMetricCard(metric) {
+    const value =
+      metric.value === null || metric.value === undefined
+        ? '—'
+        : metric.isPercent
+          ? `${percentFixed2.format(metric.value)}%`
+          : integer.format(metric.value)
+    return h('div', { class: 'card af-email-card' }, [
+      h('div', { class: 'af-metric-title' }, [
+        h('h4', { text: T[`email_metric_${metric.id}`] }),
+        helpButton(T[`email_metric_${metric.id}_help`]),
+      ]),
+      h('p', {
+        class: `af-email-card__value${metric.value === null || metric.value === undefined ? ' af-email-card__value--empty' : ''}`,
+        text: value,
+      }),
+    ])
   }
 
-  function emailTable(rows, tabId) {
+  function emailTable(rows) {
     const headers = [
-      T.email_col_campaign,
-      T.email_col_type,
-      T.email_col_sent_at,
-      T.email_col_sent,
-      T.email_col_delivered,
-      T.email_col_opened,
-      T.email_col_open_rate,
-      T.email_col_clicked,
-      T.email_col_click_rate,
+      'email_col_campaign',
+      'email_col_type',
+      'email_col_sent_at',
+      'email_col_sent',
+      'email_col_delivered',
+      'email_col_opened',
+      'email_col_open_rate',
+      'email_col_clicked',
+      'email_col_click_rate',
     ]
 
     const head = h('thead', {}, [
       h(
         'tr',
         {},
-        headers.map(header => h('th', { scope: 'col', text: header })),
+        headers.map(key => h('th', { scope: 'col', text: T[key] })),
       ),
     ])
 
@@ -1069,12 +1480,18 @@
           h('td', { class: 'num', text: integer.format(row.opened ?? 0) }),
           h('td', {
             class: 'num muted',
-            text: row.openRate === null || row.openRate === undefined ? '—' : `${tablePercent.format(row.openRate)}%`,
+            text:
+              row.openRate === null || row.openRate === undefined
+                ? '—'
+                : `${percentFixed2.format(row.openRate)}%`,
           }),
           h('td', { class: 'num', text: integer.format(row.clicked ?? 0) }),
           h('td', {
             class: 'num muted',
-            text: row.clickRate === null || row.clickRate === undefined ? '—' : `${tablePercent.format(row.clickRate)}%`,
+            text:
+              row.clickRate === null || row.clickRate === undefined
+                ? '—'
+                : `${percentFixed2.format(row.clickRate)}%`,
           }),
         ]),
       ),
@@ -1082,162 +1499,243 @@
 
     return h('div', { class: 'table-scroll' }, [
       h('table', { class: 'campaigns' }, [
-        h('caption', { text: T.email_caption }),
+        h('caption', { class: 'sr-only', text: T.email_recent_caption }),
         head,
         body,
       ]),
     ])
   }
 
-  function renderEmail(container, report, activeTab) {
+  function renderEmail(report) {
     const email = report.email
+    const section = h('section', { class: 'af-email-report', 'aria-label': T.email_report_title })
 
-    const header = h('div', { class: 'block-head' }, [
-      blockTitle(T.email_title, T.email_help),
-      h('p', {
-        class: 'block-period',
-        text: email.period
-          ? T.email_report_period(fmtDate(email.period.startDate), fmtDate(email.period.endDate))
-          : '',
-      }),
-    ])
-
-    if (email.isEmpty) {
-      container.replaceChildren(
-        header,
-        h('div', { class: 'card empty-card' }, [
-          h('h4', { text: 'Sem campanhas de email no período' }),
-          h('p', { text: 'Não há envios registrados nesta conta para o intervalo selecionado.' }),
-        ]),
-      )
-      return
-    }
-
-    const cards = EMAIL_METRIC_ORDER.map(id => {
-      const metric = email.metrics.find(item => item.id === id)
-      if (!metric) return null
-      const value = metricValue(metric)
-      return h('div', { class: 'card email-card' }, [
-        h('div', { class: 'email-card__title' }, [
-          h('h4', { text: T[`email_metric_${id}`] }),
-          helpButton(T[`email_metric_${id}_help`]),
-        ]),
+    section.appendChild(
+      h('div', { class: 'af-block-head' }, [
+        metricTitle(T.email_report_title, T.email_report_help),
         h('p', {
-          class: `email-card__value${value.empty ? ' email-card__value--empty' : ''}`,
-          text: value.text,
+          class: 'block-period',
+          text: T.email_report_period(
+            fmtDate(email.period.startDate),
+            fmtDate(email.period.endDate),
+          ),
         }),
-      ])
-    })
+      ]),
+    )
 
-    // Abas: só as que existem (a de "últimas" some quando não há data de envio).
+    section.appendChild(
+      h('div', { class: 'af-marketing-kpis' }, [
+        h(
+          'div',
+          { class: 'af-email-kpis__grid' },
+          EMAIL_METRIC_ORDER.map(id => {
+            const metric = email.metrics.find(item => item.id === id)
+            return metric ? emailMetricCard(metric) : null
+          }),
+        ),
+      ]),
+    )
+
+    section.appendChild(h('p', { class: 'af-email-scope-note', text: T.email_report_scope_note }))
+
     const availableTabs = EMAIL_TABS.filter(tab => email.tables[tab.id])
-    const current = availableTabs.find(tab => tab.id === activeTab) || availableTabs[0]
+    const current = availableTabs.find(tab => tab.id === state.emailTab) || availableTabs[0]
+    const rows = email.tables[current.id].rows ?? []
 
     const tablist = h(
       'div',
-      { class: 'tablist', role: 'tablist' },
+      { class: 'af-tablist', role: 'tablist' },
       availableTabs.map(tab =>
         h('button', {
-          class: 'tab',
+          class: 'af-tab',
           type: 'button',
           role: 'tab',
           'aria-selected': String(tab.id === current.id),
-          text: tab.label,
-          onclick: () => renderEmail(container, report, tab.id),
+          text: T[tab.labelKey],
+          onclick: () => {
+            state.emailTab = tab.id
+            renderPanel()
+          },
         }),
       ),
     )
 
-    const rows = email.tables[current.id].rows ?? []
-
-    container.replaceChildren(
-      header,
-      h('div', { class: 'kpis' }, [h('div', { class: 'email-kpis__grid' }, cards)]),
-      h('p', { class: 'scope-note', text: T.email_scope_note }),
-      h('div', { class: 'campaign-tabs' }, [
+    section.appendChild(
+      h('div', { class: 'af-campaign-tabs' }, [
         tablist,
-        h('div', { class: 'tab-content', role: 'tabpanel' }, [
-          h('h4', { text: current.title }),
+        h('div', { class: 'af-tab-content', role: 'tabpanel' }, [
+          h('h4', { text: T[current.titleKey] }),
           rows.length
-            ? emailTable(rows, current.id)
+            ? emailTable(rows)
             : h('p', {
-                class: 'campaigns-empty',
+                class: 'af-campaigns-empty',
                 text: current.id === 'recent' ? T.email_empty_recent : T.email_empty_generic,
               }),
         ]),
       ]),
     )
+
+    return section
   }
 
   // ─── Estado da página ──────────────────────────────────────────────────────
+  const REPORT_IDS = ['captacao', 'emails']
+
+  function defaultSelection() {
+    return new Set(SERIES.filter(item => item.id !== 'visits').map(item => item.id))
+  }
+
   const state = {
+    report: 'captacao',
     range: data.defaultRange(),
     visitorsConnected: true,
-    dailySelected: new Set(DAILY_SERIES.filter(item => item.defaultSelected).map(item => item.key)),
-    convSelected: new Set(CONV_SERIES.map(item => item.key)),
+    view: 'daily',
+    selected: defaultSelection(),
+    comparing: false,
     emailTab: 'sends',
+    convSelected: new Set(CONV_SERIES.map(item => item.dataKey)),
+    convProjection: false,
   }
 
   const nodes = {
+    title: document.getElementById('page-title'),
+    panel: document.getElementById('panel-content'),
     periodRow: document.getElementById('period-row'),
-    funnel: document.getElementById('block-funnel'),
-    daily: document.getElementById('block-daily'),
-    bands: document.getElementById('block-bands'),
-    convKpis: document.getElementById('block-conv-kpis'),
-    convTime: document.getElementById('block-conv-time'),
-    email: document.getElementById('block-email'),
     scenario: document.getElementById('poc-scenario'),
+    scenarioControls: document.getElementById('poc-scenario-controls'),
     scenarioToggle: document.getElementById('poc-scenario-toggle'),
+    navItems: Array.from(document.querySelectorAll('.af-reports__item')),
   }
 
-  let currentReport = null
+  const chartDraws = []
+  let resizeFrame = null
 
-  function renderAll() {
-    const report = data.load(state.range.startDate, state.range.endDate)
-    currentReport = report
+  function resetReportState() {
+    state.view = 'daily'
+    state.comparing = false
+    state.selected = defaultSelection()
+    state.emailTab = 'sends'
+    state.convSelected = new Set(CONV_SERIES.map(item => item.dataKey))
+    state.convProjection = false
+  }
 
-    const residentsVisitors = state.visitorsConnected
-      ? report.visitors
-      : { connected: false }
+  function updateNav() {
+    nodes.navItems.forEach(item => {
+      if (item.dataset.report === state.report) item.setAttribute('aria-current', 'page')
+      else item.removeAttribute('aria-current')
+    })
+  }
 
-    renderFunnel(nodes.funnel, report, residentsVisitors)
-    renderDaily(nodes.daily, report, residentsVisitors, state.dailySelected)
-    renderBands(nodes.bands, report)
-    renderConversions(nodes.convKpis, nodes.convTime, report, state.convSelected)
-    renderEmail(nodes.email, report, state.emailTab)
+  function renderHeader() {
+    const title = state.report === 'emails' ? T.report_emails_title : T.report_captacao_title
+    nodes.title.textContent = title
+    document.title = `${title} — protótipo`
+    // O simulador de "conta sem GA" só faz sentido na captação, onde o card de
+    // visitantes existe.
+    if (nodes.scenarioControls) nodes.scenarioControls.hidden = state.report === 'emails'
+  }
 
+  // O período anterior da sobreposição é uma segunda leitura da MESMA base: no
+  // mês corrente ele é o mês fechado; nas demais janelas, a janela anterior de
+  // mesma duração.
+  function comparisonReport(report) {
+    if (!state.comparing) return null
+    const range = data.comparisonRange(report.period.startDate, report.period.endDate)
+    if (!range) return null
+    return data.load(range.startDate, range.endDate)
+  }
+
+  function renderPanel() {
+    chartDraws.length = 0
+    const loaded = data.load(state.range.startDate, state.range.endDate)
+    // Conta sem GA: o card de visitantes explica a ausência e a série sai do
+    // gráfico — o resto do funil continua igual.
+    const report = state.visitorsConnected
+      ? loaded
+      : { ...loaded, visitors: { connected: false, byDay: [] } }
+
+    if (state.report === 'emails') {
+      nodes.panel.replaceChildren(renderEmail(report))
+      return
+    }
+
+    const comparison = comparisonReport(report)
+    nodes.panel.replaceChildren(
+      renderPerformance(report, comparison),
+      renderConversionKpis(report),
+      renderConversionTime(report),
+    )
+  }
+
+  function writeReportQuery(id) {
+    const params = new URLSearchParams(window.location.search)
+    params.set('relatorio', id)
+    params.delete('panel')
+    const query = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
+  }
+
+  function setReport(id) {
+    if (!REPORT_IDS.includes(id) || id === state.report) return
+    state.report = id
+    resetReportState()
+    // A conta de visitantes volta ao padrão ao trocar de relatório? Não: o
+    // estado simulado é do rodapé e vale para a sessão inteira.
+    updateNav()
+    renderHeader()
+    writeReportQuery(id)
+    renderPanel()
+  }
+
+  // ─── Inicialização ─────────────────────────────────────────────────────────
+  const params = new URLSearchParams(window.location.search)
+  const requested = params.get('relatorio')
+  if (REPORT_IDS.includes(requested)) state.report = requested
+  // `?panel=vendas` continua existindo em links antigos; com a seção de vendas
+  // desligada ele cai na captação, sem abrir uma tela escondida.
+  if (params.get('panel') === 'vendas' || !REPORT_IDS.includes(requested)) {
+    writeReportQuery(state.report)
+  }
+
+  updateNav()
+  renderHeader()
+
+  createPeriodPicker(nodes.periodRow, state, range => {
+    // Muta o MESMO objeto que o seletor guardou: substituir `state.range` por
+    // outro objeto deixaria o picker com a referência antiga.
+    state.range.startDate = range.startDate
+    state.range.endDate = range.endDate
+    state.convProjection = false
+    renderPanel()
+  })
+
+  nodes.navItems.forEach(item => {
+    item.addEventListener('click', () => setReport(item.dataset.report))
+  })
+
+  function applyScenario() {
     nodes.scenario.textContent = state.visitorsConnected
       ? 'Google Analytics conectado.'
       : 'Simulando conta sem Google Analytics.'
-  }
-
-  createPeriodPicker(nodes.periodRow, state.range, range => {
-    // Muta o MESMO objeto que o seletor guardou: substituir `state.range` por
-    // outro objeto deixaria o picker com a referência antiga e o trigger
-    // continuaria mostrando o período anterior.
-    state.range.startDate = range.startDate
-    state.range.endDate = range.endDate
-    renderAll()
-  })
-
-  nodes.scenarioToggle.addEventListener('click', () => {
-    state.visitorsConnected = !state.visitorsConnected
     nodes.scenarioToggle.textContent = state.visitorsConnected
       ? 'Simular conta sem Google Analytics'
       : 'Simular conta com Google Analytics'
-    renderAll()
+  }
+
+  nodes.scenarioToggle.addEventListener('click', () => {
+    state.visitorsConnected = !state.visitorsConnected
+    applyScenario()
+    renderPanel()
   })
 
-  renderAll()
+  applyScenario()
+  renderPanel()
 
-  // Os gráficos são medidos no layout; um resize da janela redesenha tudo que
-  // depende de largura (o sparkline é medido no primeiro frame).
-  let resizeFrame = null
   window.addEventListener('resize', () => {
     if (resizeFrame) cancelAnimationFrame(resizeFrame)
     resizeFrame = requestAnimationFrame(() => {
       resizeFrame = null
-      if (currentReport) renderAll()
+      chartDraws.forEach(draw => draw())
     })
   })
 })()
